@@ -1,0 +1,172 @@
+"use client";
+
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { CheckCircle2, Images, AlertCircle } from "lucide-react";
+import { CameraView } from "@/components/CameraView";
+import { StatusScreen } from "@/components/StatusScreen";
+import { useEventGuest } from "@/lib/hooks/useEventGuest";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { formatDateTime, isRevealed, toFriendlyError } from "@/lib/utils/format";
+import type { CompressedImage } from "@/lib/utils/imageCompression";
+import { PHOTO_BUCKET } from "@/types";
+
+type Toast = { id: number; kind: "success" | "error"; message: string };
+
+export default function CameraPage() {
+  const { eventId } = useParams<{ eventId: string }>();
+  const router = useRouter();
+  const { state } = useEventGuest(eventId);
+
+  const [usedCount, setUsedCount] = useState<number | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [toast, setToast] = useState<Toast | null>(null);
+
+  const guest = state.status === "ready" ? state.guest : null;
+  const event = state.status === "ready" ? state.event : null;
+
+  // 未参加なら参加ページへ
+  useEffect(() => {
+    if (state.status === "no-guest") router.replace(`/event/${eventId}/join`);
+  }, [state.status, eventId, router]);
+
+  // 自分の撮影済み枚数（RLS で自分の写真は常に見える）
+  useEffect(() => {
+    if (!guest) return;
+    let cancelled = false;
+    (async () => {
+      const { count, error } = await getSupabaseBrowserClient()
+        .from("photos")
+        .select("id", { count: "exact", head: true })
+        .eq("guest_id", guest.id);
+      if (!cancelled) setUsedCount(error ? 0 : (count ?? 0));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [guest]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), toast.kind === "error" ? 4000 : 1800);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
+  const maxPhotos = event?.max_photos_per_guest ?? 0;
+  const remaining = usedCount === null ? 0 : Math.max(0, maxPhotos - usedCount);
+
+  const handleCapture = useCallback(
+    async (image: CompressedImage): Promise<boolean> => {
+      if (!guest || !event || usedCount === null) return false;
+      if (usedCount >= event.max_photos_per_guest) {
+        setToast({ id: Date.now(), kind: "error", message: "撮影できる枚数の上限に達しました。" });
+        return false;
+      }
+
+      setUploading(true);
+      const supabase = getSupabaseBrowserClient();
+      const path = `${event.id}/${guest.id}_${Date.now()}.${image.extension}`;
+
+      try {
+        const { error: uploadError } = await supabase.storage.from(PHOTO_BUCKET).upload(path, image.file, {
+          contentType: image.mimeType,
+          cacheControl: "31536000",
+          upsert: false,
+        });
+        if (uploadError) throw uploadError;
+
+        const { error: insertError } = await supabase
+          .from("photos")
+          .insert({ event_id: event.id, guest_id: guest.id, storage_path: path });
+
+        if (insertError) {
+          // DB 側で弾かれた（上限超過など）ら、アップロード済みファイルを片付ける
+          await supabase.storage.from(PHOTO_BUCKET).remove([path]);
+          if (insertError.message.includes("photo_limit_reached")) {
+            setUsedCount(event.max_photos_per_guest);
+          }
+          throw insertError;
+        }
+
+        setUsedCount((c) => (c ?? 0) + 1);
+        setToast({ id: Date.now(), kind: "success", message: "撮影しました" });
+        return true;
+      } catch (e) {
+        setToast({ id: Date.now(), kind: "error", message: toFriendlyError(e) });
+        return false;
+      } finally {
+        setUploading(false);
+      }
+    },
+    [guest, event, usedCount],
+  );
+
+  if (state.status === "not-found")
+    return (
+      <StatusScreen dark title="イベントが見つかりません">
+        QRコードやURLが正しいか、主催者にご確認ください。
+      </StatusScreen>
+    );
+  if (state.status === "error")
+    return (
+      <StatusScreen dark title="読み込みに失敗しました">
+        {state.message}
+      </StatusScreen>
+    );
+  if (!guest || !event || usedCount === null) return <StatusScreen dark kind="loading" />;
+
+  const revealed = isRevealed(event.reveal_at);
+
+  return (
+    <main className="relative flex min-h-dvh flex-1 flex-col overflow-hidden bg-body text-white select-none">
+      {/* カメラ本体の質感 */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_70%_at_50%_0%,var(--body-2),var(--body)_70%)]" />
+
+      <header className="safe-top relative z-10 flex items-center justify-between gap-3 px-5 pb-4">
+        <div className="min-w-0">
+          <p className="truncate font-serif text-[15px] tracking-wide">{event.title}</p>
+          <p className="truncate text-xs text-white/45">{guest.nickname} さん</p>
+        </div>
+        <Link
+          href={`/event/${event.id}/gallery`}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-2 text-xs ring-1 ring-white/15"
+        >
+          <Images className="size-4" />
+          ギャラリー
+        </Link>
+      </header>
+
+      <div className="relative z-10 flex flex-1 flex-col pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+        <CameraView
+          remaining={remaining}
+          maxPhotos={maxPhotos}
+          disabled={uploading}
+          onCapture={handleCapture}
+        />
+        <p className="mt-5 px-6 text-center text-[11px] leading-relaxed text-balance text-white/40">
+          {revealed || !event.reveal_at
+            ? "撮った写真はギャラリーですぐに共有されます"
+            : `写真は ${formatDateTime(event.reveal_at)} に現像されます。それまではお楽しみに。`}
+        </p>
+      </div>
+
+      {toast && (
+        <div
+          key={toast.id}
+          role="status"
+          className={`pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+4.5rem)] z-20 mx-auto flex w-fit max-w-[90%] items-center gap-2 rounded-full px-4 py-2 text-sm shadow-lg animate-fade-in ${
+            toast.kind === "success" ? "bg-white text-body" : "bg-danger text-white"
+          }`}
+        >
+          {toast.kind === "success" ? (
+            <CheckCircle2 className="size-4 text-accent" />
+          ) : (
+            <AlertCircle className="size-4" />
+          )}
+          {toast.message}
+        </div>
+      )}
+    </main>
+  );
+}
