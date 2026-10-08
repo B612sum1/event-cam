@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, RefreshCcw, SwitchCamera } from "lucide-react";
+import { CalendarDays, Loader2, RefreshCcw, SwitchCamera } from "lucide-react";
+import { applyFilmEffect, formatFilmDate } from "@/lib/utils/filmEffect";
 import { compressImage, type CompressedImage } from "@/lib/utils/imageCompression";
 
 /** ファインダーの縦横比（インスタントフィルム風の縦長 3:4） */
@@ -10,6 +11,16 @@ const FRAME_ASPECT = 3 / 4;
 const MAX_CAPTURE_EDGE = 1920;
 
 type Facing = "environment" | "user";
+
+const DATE_STAMP_KEY = "event-cam:date-stamp";
+
+function loadDateStampPref(): boolean {
+  try {
+    return window.localStorage.getItem(DATE_STAMP_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
 
 type CameraError =
   | { kind: "insecure" }
@@ -43,6 +54,19 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
   const [processing, setProcessing] = useState(false);
   const [flashKey, setFlashKey] = useState(0);
   const [ejected, setEjected] = useState<{ key: number; url: string } | null>(null);
+  // このコンポーネントはクライアントでの読み込み完了後にしか描画されないので、初期値で localStorage を読んでよい
+  const [dateStamp, setDateStamp] = useState<boolean>(loadDateStampPref);
+
+  const toggleDateStamp = () => {
+    setDateStamp((on) => {
+      try {
+        window.localStorage.setItem(DATE_STAMP_KEY, on ? "off" : "on");
+      } catch {
+        /* noop */
+      }
+      return !on;
+    });
+  };
 
   // ---- カメラ起動 / 停止 ------------------------------------------------
   useEffect(() => {
@@ -157,6 +181,8 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
       if (!ctx) throw new Error("canvas が使えません");
       // プレビューはインカメラ時に鏡像表示しているが、保存する写真は正像にする（iOS 標準カメラと同じ）
       ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      // フィルムカメラ風の色・粒子・周辺減光・光漏れ・日付を焼き込む
+      applyFilmEffect(ctx, canvas.width, canvas.height, { date: dateStamp ? new Date() : null });
 
       const raw = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", 0.92),
@@ -171,7 +197,7 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
     } finally {
       setProcessing(false);
     }
-  }, [canShoot, onCapture]);
+  }, [canShoot, onCapture, dateStamp]);
 
   // PC ではスペースキーでも撮影できる
   useEffect(() => {
@@ -201,10 +227,32 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
             className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
               ready ? "opacity-100" : "opacity-0"
             } ${facing === "user" ? "-scale-x-100" : ""}`}
+            // 保存される写真に近い色味をファインダーでも再現（実際の加工は撮影時に canvas で行う）
+            style={{ filter: "sepia(0.14) saturate(0.86) contrast(0.92) brightness(1.04)" }}
             autoPlay
             muted
             playsInline
           />
+
+          {/* フィルム風プレビュー：周辺減光 + 粒子 + 日付 */}
+          {ready && (
+            <>
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,rgb(0_0_0/0.38)_100%)]" />
+              <div className="paper-grain pointer-events-none absolute inset-0 opacity-70 mix-blend-overlay" />
+              {dateStamp && (
+                <span
+                  className="pointer-events-none absolute right-[6%] bottom-[5%] font-bold tracking-wide text-[#ffc078]"
+                  style={{
+                    fontFamily: '"DIN Condensed", "DIN Alternate", "Arial Narrow", "Helvetica Neue", monospace',
+                    fontSize: "clamp(16px, 5.5vw, 26px)",
+                    textShadow: "0 0 6px rgb(255 90 0 / 0.9), 0 0 2px rgb(255 120 40 / 0.9)",
+                  }}
+                >
+                  {formatFilmDate(new Date())}
+                </span>
+              )}
+            </>
+          )}
 
           {/* 四隅のフレーム */}
           <div className="pointer-events-none absolute inset-4">
@@ -261,7 +309,20 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
 
       {/* 操作部 */}
       <div className="mt-auto grid w-full max-w-md grid-cols-3 items-center px-8 pt-8">
-        <div />
+        <div className="flex justify-start">
+          <button
+            type="button"
+            onClick={toggleDateStamp}
+            aria-pressed={dateStamp}
+            aria-label={dateStamp ? "日付を入れない" : "日付を入れる"}
+            className={`flex h-12 items-center gap-1.5 rounded-full px-3.5 text-xs ring-1 transition active:scale-95 ${
+              dateStamp ? "bg-[#ff9a3c]/15 text-[#ffc078] ring-[#ff9a3c]/40" : "bg-white/10 text-white/60 ring-white/15"
+            }`}
+          >
+            <CalendarDays className="size-4" />
+            {dateStamp ? "日付ON" : "日付OFF"}
+          </button>
+        </div>
         <div className="flex justify-center">
           <button
             type="button"
