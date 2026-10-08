@@ -104,34 +104,28 @@ export default function CameraPage() {
 
   if (state.status === "not-found")
     return (
-      <StatusScreen dark title="イベントが見つかりません">
+      <StatusScreen title="イベントが見つかりません">
         QRコードやURLが正しいか、主催者にご確認ください。
       </StatusScreen>
     );
   if (state.status === "error")
     return (
-      <StatusScreen dark title="読み込みに失敗しました">
+      <StatusScreen title="読み込みに失敗しました">
         {state.message}
       </StatusScreen>
     );
-  if (!guest || !event || usedCount === null) return <StatusScreen dark kind="loading" />;
+  if (!guest || !event || usedCount === null) return <StatusScreen kind="loading" />;
 
   const revealed = isRevealed(event.reveal_at);
 
   return (
-    <main className="relative flex min-h-dvh flex-1 flex-col overflow-hidden bg-body text-white select-none">
-      {/* カメラ本体の質感 */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_70%_at_50%_0%,var(--body-2),var(--body)_70%)]" />
-
-      <header className="safe-top relative z-10 flex items-center justify-between gap-3 px-5 pb-4">
-        <div className="min-w-0">
-          <p className="truncate font-serif text-[15px] tracking-wide">{event.title}</p>
-          <p className="truncate text-xs text-white/45">{guest.nickname} さん</p>
+    <main className="relative flex min-h-dvh flex-1 flex-col overflow-hidden bg-bg select-none">
+      <header className="safe-top relative z-10 mx-auto flex w-full max-w-md items-center justify-between gap-3 pr-4 pb-3.5 pl-5">
+        <div className="min-w-0 pt-2">
+          <p className="truncate text-[15px] font-semibold">{event.title}</p>
+          <p className="truncate text-xs text-label-2">{guest.nickname} さん</p>
         </div>
-        <Link
-          href={`/event/${event.id}/gallery`}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-2 text-xs ring-1 ring-white/15"
-        >
+        <Link href={`/event/${event.id}/gallery`} className="btn-glass mt-2 shrink-0">
           <Images className="size-4" />
           ギャラリー
         </Link>
@@ -144,10 +138,10 @@ export default function CameraPage() {
           disabled={uploading}
           onCapture={handleCapture}
         />
-        <p className="mt-5 px-6 text-center text-[11px] leading-relaxed text-balance text-white/40">
+        <p className="mt-4 px-6 text-center text-xs leading-relaxed text-balance text-label-3">
           {revealed || !event.reveal_at
-            ? "撮った写真はギャラリーですぐに共有されます"
-            : `写真は ${formatDateTime(event.reveal_at)} に現像されます。それまではお楽しみに。`}
+            ? `残り ${remaining} 枚。撮った写真は、すぐギャラリーに並びます。`
+            : `残り ${remaining} 枚。現像は ${formatDateTime(event.reveal_at)}。`}
         </p>
       </div>
 
@@ -155,12 +149,12 @@ export default function CameraPage() {
         <div
           key={toast.id}
           role="status"
-          className={`pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+4.5rem)] z-20 mx-auto flex w-fit max-w-[90%] items-center gap-2 rounded-full px-4 py-2 text-sm shadow-lg animate-fade-in ${
-            toast.kind === "success" ? "bg-white text-body" : "bg-danger text-white"
+          className={`pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+5.5rem)] z-20 mx-auto flex w-fit max-w-[90%] items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold shadow-lg animate-fade-in ${
+            toast.kind === "success" ? "bg-label text-black" : "bg-danger text-black"
           }`}
         >
           {toast.kind === "success" ? (
-            <CheckCircle2 className="size-4 text-accent" />
+            <CheckCircle2 className="size-4 text-teal" aria-hidden />
           ) : (
             <AlertCircle className="size-4" />
           )}

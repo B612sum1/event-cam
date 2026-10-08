@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ChevronLeft, Loader2 } from "lucide-react";
+import { Wordmark } from "@/components/Carton";
 import { ensureAnonymousUser, getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toDateTimeLocalValue, toFriendlyError } from "@/lib/utils/format";
 
@@ -80,145 +81,147 @@ export default function CreateEventPage() {
   };
 
   return (
-    <main className="paper-grain flex min-h-dvh flex-1 flex-col px-5 py-8">
-      <div className="mx-auto w-full max-w-lg">
-        <Link href="/" className="inline-flex items-center gap-1 text-sm text-muted">
-          <ArrowLeft className="size-4" /> トップ
+    <main className="safe-top safe-bottom flex min-h-dvh flex-1 flex-col bg-bg">
+      <header className="mx-auto flex h-[52px] w-full max-w-lg items-center justify-between px-4">
+        <Link href="/" className="link h-11">
+          <ChevronLeft className="size-5" />
+          トップ
         </Link>
+        <Wordmark />
+      </header>
 
-        <p className="mt-8 text-xs tracking-[0.3em] text-gold">NEW EVENT</p>
-        <h1 className="mt-2 font-serif text-3xl tracking-wide">イベントを作成</h1>
-        <p className="mt-3 text-sm leading-relaxed text-muted">
-          作成すると参加用のQRコードが発行されます。テーブルに置いたり、招待状に印刷してご利用ください。
+      <div className="mx-auto w-full max-w-lg px-5 pt-3 pb-10">
+        <h1 className="large-title">イベントを作る</h1>
+        <p className="mt-2 text-[15px] leading-relaxed text-label-2">
+          作ると、参加用のQRコードができます。テーブルに置いたり、招待状に印刷して使ってください。
         </p>
 
-        <form onSubmit={submit} className="mt-10 space-y-8">
-          <Field label="イベント名" htmlFor="title">
-            <input
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              maxLength={100}
-              required
-              placeholder="例：Taro & Hanako Wedding"
-              className="input"
-            />
-          </Field>
+        <form onSubmit={submit} className="mt-8 space-y-8">
+          <Section label="イベント名">
+            <div className="group-list">
+              <div className="group-row h-[50px]">
+                <input
+                  id="title"
+                  aria-label="イベント名"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  maxLength={100}
+                  required
+                  placeholder="Taro & Hanako Wedding"
+                  className="min-w-0 flex-1 bg-transparent text-base outline-none"
+                />
+              </div>
+            </div>
+          </Section>
 
-          <Field label="1人あたりの撮影枚数" htmlFor="max" hint="使い捨てカメラは27枚。少ないほど一枚一枚が特別になります。">
-            <div className="flex flex-wrap items-center gap-2">
+          <Section label="1人あたりの枚数" hint="本物の使い捨てカメラは27枚撮り。少ないほど、1枚1枚を大事に撮ってもらえます。">
+            <div className="flex flex-wrap gap-2">
               {PHOTO_PRESETS.map((n) => (
                 <button
                   key={n}
                   type="button"
                   onClick={() => setMaxPhotos(n)}
-                  className={`rounded-full px-4 py-2 text-sm ring-1 transition ${
-                    maxPhotos === n ? "bg-body text-white ring-body" : "bg-card ring-line"
+                  aria-pressed={maxPhotos === n}
+                  className={`h-10 rounded-full px-4 text-[15px] font-semibold transition ${
+                    maxPhotos === n ? "bg-label text-black" : "bg-surface text-label"
                   }`}
                 >
-                  {n}枚
+                  {n}枚撮り
                 </button>
               ))}
-              <div className="flex items-center gap-2">
-                <input
-                  id="max"
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  max={100}
-                  value={Number.isNaN(maxPhotos) ? "" : maxPhotos}
-                  onChange={(e) => setMaxPhotos(e.target.valueAsNumber)}
-                  className="input w-24 text-center"
-                />
-                <span className="text-sm text-muted">枚</span>
+            </div>
+            <div className="group-list mt-3">
+              <div className="group-row h-[50px]">
+                <label htmlFor="max">枚数を入力</label>
+                <span className="flex items-center gap-1 text-label-2">
+                  <input
+                    id="max"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={100}
+                    value={Number.isNaN(maxPhotos) ? "" : maxPhotos}
+                    onChange={(e) => setMaxPhotos(e.target.valueAsNumber)}
+                    className="w-14 bg-transparent text-right text-base text-label outline-none"
+                  />
+                  枚
+                </span>
               </div>
             </div>
-          </Field>
+          </Section>
 
-          <Field label="現像（一斉公開）のタイミング">
-            <div className="grid grid-cols-2 gap-2">
+          <Section label="現像のタイミング">
+            <div className="grid grid-cols-2 gap-1 rounded-[10px] bg-surface p-1" role="radiogroup" aria-label="現像のタイミング">
               {(
                 [
-                  { v: "scheduled", t: "日時を指定", d: "その時刻まで誰も見られない" },
-                  { v: "immediate", t: "すぐ公開", d: "撮った瞬間にギャラリーへ" },
+                  { v: "scheduled", t: "時間を決める" },
+                  { v: "immediate", t: "撮ってすぐ" },
                 ] as const
               ).map((o) => (
                 <button
                   key={o.v}
                   type="button"
+                  role="radio"
+                  aria-checked={mode === o.v}
                   onClick={() => setMode(o.v)}
-                  className={`rounded-2xl px-4 py-3 text-left ring-1 transition ${
-                    mode === o.v ? "bg-card ring-2 ring-accent" : "bg-card/60 ring-line"
+                  className={`h-9 rounded-[7px] text-sm font-semibold transition ${
+                    mode === o.v ? "bg-surface-2 text-label shadow-[0_1px_3px_rgb(0_0_0/0.4)]" : "text-label-2"
                   }`}
                 >
-                  <span className="block text-sm font-medium">{o.t}</span>
-                  <span className="mt-0.5 block text-xs text-muted">{o.d}</span>
+                  {o.t}
                 </button>
               ))}
             </div>
+            <p className="mt-2 px-4 text-[13px] text-label-2">
+              {mode === "scheduled" ? "その時間まで、誰も写真を見られません。" : "撮った写真が、すぐギャラリーに並びます。"}
+            </p>
 
             {mode === "scheduled" && (
-              <div className="mt-4 space-y-3">
-                <input
-                  type="datetime-local"
-                  value={revealLocal}
-                  onChange={(e) => setRevealLocal(e.target.value)}
-                  className="input"
-                  aria-label="現像日時"
-                />
-                <div className="flex flex-wrap gap-2">
+              <div className="mt-3 space-y-3">
+                <div className="group-list">
+                  <div className="group-row h-[50px]">
+                    <label htmlFor="reveal" className="shrink-0">現像する日時</label>
+                    <input
+                      id="reveal"
+                      type="datetime-local"
+                      value={revealLocal}
+                      onChange={(e) => setRevealLocal(e.target.value)}
+                      className="min-w-0 bg-transparent text-right text-base text-label-2 outline-none [color-scheme:dark]"
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 px-1">
                   {quickTimes().map((q) => (
-                    <button
-                      key={q.label}
-                      type="button"
-                      onClick={() => setRevealLocal(q.value)}
-                      className="rounded-full bg-paper-2 px-3 py-1.5 text-xs text-ink/80"
-                    >
+                    <button key={q.label} type="button" onClick={() => setRevealLocal(q.value)} className="btn-glass">
                       {q.label}
                     </button>
                   ))}
                 </div>
               </div>
             )}
-          </Field>
+          </Section>
 
-          {error && <p className="text-sm text-danger">{error}</p>}
+          {error && <p className="px-4 text-sm text-danger">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-6 py-4 font-medium text-accent-ink shadow-sm disabled:opacity-60"
-          >
-            {submitting && <Loader2 className="size-5 animate-spin" />}
-            イベントを作成してQRコードを発行
-          </button>
-          <p className="text-center text-[11px] leading-relaxed text-muted">
-            管理画面は、作成に使ったこのブラウザからのみ開けます。
-          </p>
+          <div className="space-y-3">
+            <button type="submit" disabled={submitting} className="btn-primary w-full">
+              {submitting && <Loader2 className="size-5 animate-spin" />}
+              イベントを作る
+            </button>
+            <p className="text-center text-xs text-label-3">管理画面は、いま使っているこのブラウザでだけ開けます。</p>
+          </div>
         </form>
       </div>
     </main>
   );
 }
 
-function Field({
-  label,
-  htmlFor,
-  hint,
-  children,
-}: {
-  label: string;
-  htmlFor?: string;
-  hint?: string;
-  children: ReactNode;
-}) {
+function Section({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <div>
-      <label htmlFor={htmlFor} className="mb-2 block text-sm font-medium">
-        {label}
-      </label>
+    <section>
+      <h2 className="mb-2 px-4 text-[13px] text-label-2">{label}</h2>
       {children}
-      {hint && <p className="mt-2 text-xs text-muted">{hint}</p>}
-    </div>
+      {hint && <p className="mt-2 px-4 text-[13px] leading-relaxed text-label-2">{hint}</p>}
+    </section>
   );
 }

@@ -1,63 +1,71 @@
 @import "tailwindcss";
 
 /* ------------------------------------------------------------------
-   デザイントークン
-   紙の招待状のようなクリーム色 + インク + ワインレッドのアクセント。
-   フォントは端末内蔵の日本語フォントを使う（会場の回線でもダウンロード不要）。
+   デザイントークン：黒を基調にした「Apple × レトロな使い捨てカメラ」
+   画面はすべて黒。外箱のマスタード・インクのティール／トマト・
+   DPE袋のクラフト紙・フィルムの色は「物」にだけ使う。
 ------------------------------------------------------------------- */
 :root {
-  --paper: #f6f0e6;
-  --paper-2: #ece3d4;
-  --card: #fffdf8;
-  --ink: #2a2420;
-  --muted: #7b6f63;
-  --line: rgb(42 36 32 / 0.12);
-  --accent: #9e3d52;
-  --accent-ink: #ffffff;
-  --gold: #a9874f;
-  --body: #171412; /* カメラ本体 */
-  --body-2: #24201c;
-  --danger: #b4372f;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #1a1613;
-    --paper-2: #241f1b;
-    --card: #221d19;
-    --ink: #f1e9dc;
-    --muted: #b3a695;
-    --line: rgb(241 233 220 / 0.14);
-    --accent: #d06a80;
-    --accent-ink: #1a1613;
-    --gold: #cfae74;
-  }
+  /* 画面 */
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #2c2c2e;
+  --separator: #38383a;
+  --label: #f5f5f7;
+  --label-2: rgb(235 235 245 / 0.6);
+  --label-3: rgb(235 235 245 / 0.45);
+  --accent: #ffc078; /* 日付LCDのオレンジ。リンク・強調に */
+  /* 物の色 */
+  --mustard: #e6b03a;
+  --teal: #1f6b66;
+  --teal-light: #4fb3a9;
+  --teal-ink: #164e4a;
+  --tomato: #d8492f;
+  --kraft: #cdab7d;
+  --kraft-deep: #a8865a;
+  --sticker: #fbfaf6;
+  --ink: #1d1d1f;
+  --muted: #6e6e73;
+  --film: #24170e;
+  --edge: #f0a53c;
+  --danger: #ff6961;
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-paper: var(--paper);
-  --color-paper-2: var(--paper-2);
-  --color-card: var(--card);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-separator: var(--separator);
+  --color-label: var(--label);
+  --color-label-2: var(--label-2);
+  --color-label-3: var(--label-3);
+  --color-accent: var(--accent);
+  --color-mustard: var(--mustard);
+  --color-teal: var(--teal);
+  --color-teal-light: var(--teal-light);
+  --color-teal-ink: var(--teal-ink);
+  --color-tomato: var(--tomato);
+  --color-kraft: var(--kraft);
+  --color-kraft-deep: var(--kraft-deep);
+  --color-sticker: var(--sticker);
   --color-ink: var(--ink);
   --color-muted: var(--muted);
-  --color-line: var(--line);
-  --color-accent: var(--accent);
-  --color-accent-ink: var(--accent-ink);
-  --color-gold: var(--gold);
-  --color-body: var(--body);
-  --color-body-2: var(--body-2);
+  --color-film: var(--film);
+  --color-edge: var(--edge);
   --color-danger: var(--danger);
 
-  --font-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo",
-    "Noto Sans JP", system-ui, sans-serif;
-  --font-serif: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP",
-    "Times New Roman", serif;
-  --font-mono: ui-monospace, "SF Mono", "Menlo", monospace;
+  /* Apple 端末では SF Pro + ヒラギノで表示される */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans",
+    "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  /* ロゴとフィルムのコマ番号だけに使う長体 */
+  --font-cond: "DIN Condensed", "DIN Alternate", "Roboto Condensed", "sans-serif-condensed",
+    "Arial Narrow", "DejaVu Sans Condensed", sans-serif;
 
   --animate-flash: flash 450ms ease-out forwards;
   --animate-eject: eject 1800ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
-  --animate-develop: develop 3.2s ease-in-out infinite;
-  --animate-fade-in: fade-in 300ms ease-out both;
+  --animate-wind: wind 600ms cubic-bezier(0.3, 0.6, 0.3, 1);
+  --animate-fade-in: fade-in 260ms ease-out both;
 
   @keyframes flash {
     0% { opacity: 0.95; }
@@ -69,26 +77,66 @@
     70% { transform: translateY(0) rotate(-4deg); opacity: 1; }
     100% { transform: translateY(10%) rotate(-6deg); opacity: 0; }
   }
-  @keyframes develop {
-    0%, 100% { opacity: 0.55; }
-    50% { opacity: 0.9; }
+  @keyframes wind {
+    from { background-position-y: 0; }
+    to { background-position-y: -36px; }
   }
   @keyframes fade-in {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: none; }
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 }
 
 @layer components {
-  .input {
-    @apply w-full rounded-xl border border-line bg-card px-4 py-3 text-base outline-none transition;
-    @apply focus:border-accent focus:ring-2 focus:ring-accent/20;
+  /* 設定アプリ風の角丸リスト */
+  .group-list {
+    @apply overflow-hidden rounded-xl bg-surface;
   }
-  .btn-ghost {
-    @apply whitespace-nowrap inline-flex items-center gap-2 rounded-full bg-card px-4 py-2.5 text-sm ring-1 ring-line transition active:scale-[0.98];
+  .group-row {
+    @apply flex min-h-[46px] items-center justify-between gap-4 px-4 text-base;
   }
+  .group-row + .group-row { position: relative; }
+  .group-row + .group-row::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 16px;
+    height: 1px;
+    background: var(--separator);
+  }
+  /* 白いピル型のメインボタン */
   .btn-primary {
-    @apply whitespace-nowrap inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2.5 text-sm font-medium text-accent-ink transition active:scale-[0.98];
+    @apply inline-flex h-[50px] items-center justify-center gap-2 rounded-[14px] bg-label px-6 text-[17px] font-semibold whitespace-nowrap text-black transition active:opacity-80 disabled:opacity-40;
+  }
+  /* 半透明のサブボタン */
+  .btn-glass {
+    @apply inline-flex h-9 items-center justify-center gap-1.5 rounded-full bg-white/[0.14] px-3.5 text-sm font-semibold whitespace-nowrap text-label transition active:opacity-70 disabled:opacity-40;
+  }
+  .link {
+    @apply inline-flex items-center gap-1 text-base text-accent;
+  }
+  .large-title {
+    @apply text-[34px] leading-[1.15] font-bold tracking-[-0.02em];
+  }
+  .cond {
+    font-family: var(--font-cond);
+    font-weight: 700;
+  }
+  /* 外箱の紙 */
+  .carton { background-color: var(--mustard); color: var(--ink); }
+  /* DPE袋のクラフト紙 */
+  .kraft {
+    background-color: var(--kraft);
+    background-image: repeating-linear-gradient(0deg, rgb(90 60 20 / 0.05) 0 1px, transparent 1px 5px);
+  }
+  /* ファインダーに重ねるフィルムの粒子 */
+  .film-grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  :where(a, button, input, select):focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
   }
 }
 
@@ -98,29 +146,23 @@ html {
 }
 
 body {
-  background: var(--paper);
-  color: var(--ink);
+  background: var(--bg);
+  color: var(--label);
   font-family: var(--font-sans);
-  font-feature-settings: "palt";
 }
 
-/* 細かな粒子で紙っぽさを出す（画像なし・SVGフィルタ） */
-.paper-grain {
-  background-image:
-    radial-gradient(ellipse at top, rgb(255 255 255 / 0.5), transparent 60%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-@media (prefers-color-scheme: dark) {
-  .paper-grain {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  }
-}
+input::placeholder { color: #636366; }
 
 /* iPhone のノッチ・ホームバーを避ける */
-.safe-top { padding-top: max(env(safe-area-inset-top), 0.75rem); }
-.safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 1rem); }
+.safe-top { padding-top: max(env(safe-area-inset-top), 0.5rem); }
+.safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 1.5rem); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
 
 @media print {
-  @page { size: A4 portrait; margin: 14mm; }
-  body { background: #fff !important; color: #000 !important; }
+  @page { size: A4 portrait; margin: 12mm; }
+  html, body { background: #fff !important; color: var(--ink) !important; }
+  .carton { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

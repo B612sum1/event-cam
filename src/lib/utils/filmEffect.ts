@@ -138,33 +138,96 @@ function drawLightLeak(ctx: CanvasRenderingContext2D, w: number, h: number, rand
   ctx.restore();
 }
 
-/** 日付表示用の文字列：'26 10 9 のような使い捨てカメラ風 */
+// ---- 日付（使い捨てカメラの7セグメントLCD風） -------------------------------
+
+/** 写真に入る日付：令和表記の「R8 10 9」。撮影した日時から自動で決まり、変更できない */
 export function formatFilmDate(date: Date) {
-  const yy = String(date.getFullYear()).slice(-2);
-  return `'${yy} ${date.getMonth() + 1} ${date.getDate()}`;
+  const reiwa = date.getFullYear() - 2018; // 2019年 = 令和1年
+  return `R${reiwa} ${date.getMonth() + 1} ${date.getDate()}`;
 }
 
-/** オレンジ色に滲む日付（右下） */
+/*
+ * 7セグメントの形（1文字 = 幅1 × 高さ2 の箱）
+ *   a
+ * f   b
+ *   g
+ * e   c
+ *   d      R は a,b,f,g,e + 右下への斜め線
+ */
+type Seg = [number, number, number, number];
+const SEG: Record<string, Seg> = {
+  a: [0, 0, 1, 0],
+  b: [1, 0, 1, 1],
+  c: [1, 1, 1, 2],
+  d: [0, 2, 1, 2],
+  e: [0, 1, 0, 2],
+  f: [0, 0, 0, 1],
+  g: [0, 1, 1, 1],
+  r: [0.45, 1, 1, 2],
+};
+const GLYPHS: Record<string, string> = {
+  "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc",
+  "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg",
+  R: "abfger", "-": "g",
+};
+const SLANT = 0.12; // 右に少し傾ける
+const GAP = 0.13; // 線同士のすき間
+const ADVANCE = 1.62; // 1文字の送り幅
+const SPACE = 0.95; // 空白の送り幅
+
+/**
+ * 文字列を線分の集まりに変換する（単位：文字の高さの半分）。
+ * 写真への焼き込み（canvas）とプレビュー（SVG）で同じ形を使うための共通処理。
+ */
+export function segmentLines(text: string) {
+  const lines: Seg[] = [];
+  let x = 0;
+  for (const ch of text) {
+    if (ch === " ") {
+      x += SPACE;
+      continue;
+    }
+    for (const key of GLYPHS[ch] ?? "") {
+      const [x1, y1, x2, y2] = SEG[key];
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      const ux = ((x2 - x1) / len) * GAP;
+      const uy = ((y2 - y1) / len) * GAP;
+      const p = (px: number, py: number): [number, number] => [x + px + (2 - py) * SLANT, py];
+      const [ax, ay] = p(x1 + ux, y1 + uy);
+      const [bx, by] = p(x2 - ux, y2 - uy);
+      lines.push([ax, ay, bx, by]);
+    }
+    x += ADVANCE;
+  }
+  return { lines, width: x - (ADVANCE - 1) + 2 * SLANT, height: 2 };
+}
+
+/** 黄色く光るLCDの日付（右下） */
 function drawDateStamp(ctx: CanvasRenderingContext2D, w: number, h: number, date: Date) {
-  const text = formatFilmDate(date);
-  const size = Math.round(Math.min(w, h) * 0.055);
-  const margin = Math.round(Math.min(w, h) * 0.06);
+  const { lines, width } = segmentLines(formatFilmDate(date));
+  const digitH = Math.round(Math.min(w, h) * 0.046); // 数字1文字の高さ
+  const u = digitH / 2;
+  const left = w - w * 0.1 - width * u;
+  const top = h - h * 0.075 - digitH;
+
+  const stroke = (lineWidth: number, color: string, blur: number, glow: string) => {
+    ctx.beginPath();
+    for (const [x1, y1, x2, y2] of lines) {
+      ctx.moveTo(left + x1 * u, top + y1 * u);
+      ctx.lineTo(left + x2 * u, top + y2 * u);
+    }
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = color;
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = blur;
+    ctx.stroke();
+  };
 
   ctx.save();
-  ctx.font = `700 ${size}px "DIN Condensed", "DIN Alternate", "Arial Narrow", "Helvetica Neue", monospace`;
-  ctx.textAlign = "right";
-  ctx.textBaseline = "alphabetic";
-  const x = w - margin;
-  const y = h - margin;
-
-  // 外側の滲み
-  ctx.shadowColor = "rgba(255, 90, 0, 0.9)";
-  ctx.shadowBlur = size * 0.45;
-  ctx.fillStyle = "rgba(255, 140, 50, 0.85)";
-  ctx.fillText(text, x, y);
-  // 芯
-  ctx.shadowBlur = size * 0.12;
-  ctx.fillStyle = "rgba(255, 196, 120, 0.92)";
-  ctx.fillText(text, x, y);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  // 外側のにじみ → 芯の順に重ねる
+  stroke(u * 0.3, "rgba(235, 170, 40, 0.45)", u * 0.8, "rgba(230, 140, 10, 0.8)");
+  stroke(u * 0.19, "rgba(246, 206, 82, 0.92)", u * 0.22, "rgba(240, 170, 30, 0.85)");
   ctx.restore();
 }

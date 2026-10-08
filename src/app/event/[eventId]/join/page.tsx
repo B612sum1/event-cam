@@ -2,7 +2,9 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { ArrowRight, Camera, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { CameraIllustration } from "@/components/CameraIllustration";
+import { Wordmark } from "@/components/Carton";
 import { StatusScreen } from "@/components/StatusScreen";
 import { useEventGuest } from "@/lib/hooks/useEventGuest";
 import { ensureAnonymousUser, getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -63,58 +65,61 @@ export default function JoinPage() {
     }
   };
 
-  return (
-    <main className="paper-grain flex min-h-dvh flex-1 flex-col items-center px-6 py-12">
-      <div className="flex w-full max-w-sm flex-1 flex-col">
-        <div className="flex flex-1 flex-col items-center justify-center text-center">
-          <span className="grid size-14 place-items-center rounded-2xl bg-body text-[#f6f0e6] shadow-lg">
-            <Camera className="size-7" strokeWidth={1.6} />
-          </span>
-          <p className="mt-8 text-xs tracking-[0.3em] text-gold">WELCOME</p>
-          <h1 className="mt-3 font-serif text-[28px] leading-snug tracking-wide text-balance">{event.title}</h1>
-          <div className="mt-6 h-px w-12 bg-line" />
-          <p className="mt-6 text-sm leading-relaxed text-muted">
-            <span className="inline-block">あなたのスマホが、</span>
-            <span className="inline-block">今日だけのインスタントカメラに。</span>
-            <br />
-            ひとり<strong className="font-semibold text-ink">{event.max_photos_per_guest}枚</strong>まで撮影できます。
-          </p>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            {event.reveal_at && !isRevealed(event.reveal_at)
-              ? `写真は ${formatDateTime(event.reveal_at)} に一斉に現像されます。`
-              : "撮った写真はすぐにギャラリーで共有されます。"}
-          </p>
-        </div>
+  const revealPending = event.reveal_at && !isRevealed(event.reveal_at);
 
-        <form onSubmit={join} className="mt-10 w-full">
-          <label htmlFor="nickname" className="mb-2 block text-xs tracking-wider text-muted">
-            ニックネーム（写真に表示されます）
-          </label>
-          <input
-            id="nickname"
-            value={value}
-            onChange={(e) => setNickname(e.target.value)}
-            maxLength={30}
-            autoComplete="nickname"
-            enterKeyHint="go"
-            placeholder="例：新郎友人 たろう"
-            className="w-full rounded-xl border border-line bg-card px-4 py-3.5 text-base outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20"
-          />
-          {error && <p className="mt-2 text-sm text-danger">{error}</p>}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-accent px-6 py-4 text-base font-medium text-accent-ink shadow-sm transition active:scale-[0.99] disabled:opacity-60"
-          >
-            {submitting ? <Loader2 className="size-5 animate-spin" /> : null}
-            {existing ? "カメラに戻る" : "参加する"}
-            {!submitting && <ArrowRight className="size-4" />}
-          </button>
-          <p className="mt-4 text-center text-[11px] leading-relaxed text-muted">
-            <span className="inline-block">会員登録は不要です。</span><span className="inline-block">参加情報はこの端末のブラウザに保存されます。</span>
-          </p>
-        </form>
+  return (
+    <main className="safe-top safe-bottom mx-auto flex min-h-dvh w-full max-w-md flex-1 flex-col items-center px-5">
+      <Wordmark className="mt-10" />
+      <CameraIllustration className="mt-10" shots={event.max_photos_per_guest} />
+
+      <h1 className="mt-12 text-center text-[32px] leading-tight font-bold tracking-[-0.02em]">撮って、待って、現像。</h1>
+      <p className="mt-2.5 text-center text-[15px] leading-relaxed text-label-2 text-balance">
+        {event.title} の、今日だけのカメラ。
+      </p>
+
+      <div className="group-list mt-8 w-full">
+        <div className="group-row">
+          <span>撮れる枚数</span>
+          <span className="text-label-2">{event.max_photos_per_guest}枚</span>
+        </div>
+        <div className="group-row">
+          <span>現像</span>
+          <span className="text-label-2">{revealPending ? formatDateTime(event.reveal_at!) : "撮ってすぐ"}</span>
+        </div>
       </div>
+      <p className="mt-2 w-full px-4 text-[13px] leading-relaxed text-label-2">
+        {revealPending
+          ? "現像まで、誰も写真を見られません。撮った本人も。"
+          : "撮った写真は、すぐにみんなのギャラリーに並びます。"}
+      </p>
+
+      <div className="min-h-8 flex-1" />
+
+      <form onSubmit={join} className="flex w-full flex-col gap-3 pt-6">
+        <div className="group-list">
+          <div className="group-row h-[50px]">
+            <label htmlFor="nickname" className="shrink-0">
+              おなまえ
+            </label>
+            <input
+              id="nickname"
+              value={value}
+              onChange={(e) => setNickname(e.target.value)}
+              maxLength={30}
+              autoComplete="nickname"
+              enterKeyHint="go"
+              placeholder="新郎友人 たろう"
+              className="min-w-0 flex-1 bg-transparent text-right text-base outline-none"
+            />
+          </div>
+        </div>
+        {error && <p className="px-4 text-sm text-danger">{error}</p>}
+        <button type="submit" disabled={submitting} className="btn-primary w-full">
+          {submitting && <Loader2 className="size-5 animate-spin" />}
+          {existing ? "カメラに戻る" : "カメラを受け取る"}
+        </button>
+        <p className="text-center text-xs text-label-3">登録はいりません。このブラウザに保存されます。</p>
+      </form>
     </main>
   );
 }

@@ -37,19 +37,19 @@ export function MyEvents() {
   if (events.length === 0) return null;
 
   return (
-    <div className="mt-14 max-w-md">
-      <h2 className="text-xs tracking-wider text-muted">あなたが作成したイベント</h2>
-      <ul className="mt-3 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
+    <div className="mt-14 w-full max-w-md text-left">
+      <h2 className="px-4 text-[13px] text-label-2">作ったイベント</h2>
+      <ul className="group-list mt-1.5">
         {events.map((e) => (
-          <li key={e.id}>
-            <Link href={`/admin/events/${e.id}`} className="flex items-center gap-3 px-4 py-3.5">
+          <li key={e.id} className="group-row p-0">
+            <Link href={`/admin/events/${e.id}`} className="flex w-full items-center gap-3 px-4 py-3">
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{e.title}</span>
-                <span className="block text-xs text-muted">
-                  {e.reveal_at ? `${formatDateTime(e.reveal_at)} 現像` : "すぐ公開"}
+                <span className="block truncate text-base">{e.title}</span>
+                <span className="block text-[13px] text-label-2">
+                  {e.reveal_at ? `現像 ${formatDateTime(e.reveal_at)}` : "撮ってすぐ公開"}
                 </span>
               </span>
-              <ChevronRight className="size-4 text-muted" />
+              <ChevronRight className="size-4 text-label-3" />
             </Link>
           </li>
         ))}

@@ -4,16 +4,16 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft,
+  ChevronLeft,
   Camera,
   Check,
   Copy,
   ExternalLink,
   Images,
   Printer,
-  Sparkles,
-  Users,
 } from "lucide-react";
+import { CameraIllustration } from "@/components/CameraIllustration";
+import { Wordmark } from "@/components/Carton";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { QRCodeDisplay } from "@/components/QRCodeDisplay";
 import { StatusScreen } from "@/components/StatusScreen";
@@ -164,133 +164,123 @@ export default function AdminEventPage() {
   return (
     <>
       {/* ============ 画面表示 ============ */}
-      <main className="paper-grain flex min-h-dvh flex-1 flex-col px-5 py-8 print:hidden">
-        <div className="mx-auto w-full max-w-5xl">
-          <Link href="/" className="inline-flex items-center gap-1 text-sm text-muted">
-            <ArrowLeft className="size-4" /> トップ
+      <main className="safe-top safe-bottom flex min-h-dvh flex-1 flex-col bg-bg print:hidden">
+        <header className="mx-auto flex h-[52px] w-full max-w-5xl items-center justify-between px-4">
+          <Link href="/" className="link h-11">
+            <ChevronLeft className="size-5" />
+            トップ
           </Link>
+          <Wordmark />
+        </header>
 
-          <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-xs tracking-[0.3em] text-gold">DASHBOARD</p>
-              <h1 className="mt-2 font-serif text-3xl tracking-wide">{event.title}</h1>
+        <div className="mx-auto w-full max-w-5xl px-5 pt-3 pb-10">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[13px] text-label-2">管理画面</p>
+              <h1 className="large-title mt-1">{event.title}</h1>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link href={`/event/${event.id}/gallery`} className="btn-ghost">
+              <Link href={`/event/${event.id}/gallery`} className="btn-glass">
                 <Images className="size-4" /> ギャラリー
               </Link>
-              <Link href={`/event/${event.id}/join`} className="btn-ghost">
-                <Camera className="size-4" /> 自分も撮影に参加
+              <Link href={`/event/${event.id}/join`} className="btn-glass">
+                <Camera className="size-4" /> 自分も撮る
               </Link>
             </div>
           </div>
 
-          <div className="mt-8 grid gap-5 lg:grid-cols-[360px_1fr]">
+          <div className="mt-8 grid gap-6 lg:grid-cols-[340px_1fr]">
             {/* QR */}
-            <section className="rounded-3xl border border-line bg-card p-6 text-center">
-              <h2 className="text-sm font-medium">参加用QRコード</h2>
-              <div className="mt-5 flex justify-center">
-                {joinUrl ? <QRCodeDisplay value={joinUrl} size={232} /> : <div className="size-[264px]" />}
+            <section className="flex flex-col items-center rounded-2xl bg-surface p-6 text-center">
+              <h2 className="text-[15px] font-semibold">参加用QRコード</h2>
+              <div className="mt-5">
+                <QRCodeDisplay value={joinUrl} size={220} className="shadow-none" />
               </div>
-              <p className="mt-4 break-all font-mono text-[11px] text-muted">{joinUrl}</p>
-              <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                <button type="button" onClick={copyLink} className="btn-ghost justify-center">
+              <p className="mt-4 text-[11px] break-all text-label-3">{joinUrl}</p>
+              <div className="mt-5 grid w-full gap-2">
+                <button type="button" onClick={() => window.print()} className="btn-primary w-full">
+                  <Printer className="size-4" /> 卓上カードを印刷
+                </button>
+                <button type="button" onClick={copyLink} className="btn-glass h-11 w-full">
                   {copied ? <Check className="size-4 text-accent" /> : <Copy className="size-4" />}
                   {copied ? "コピーしました" : "リンクをコピー"}
                 </button>
-                <button type="button" onClick={() => window.print()} className="btn-primary justify-center">
-                  <Printer className="size-4" /> 印刷する
-                </button>
               </div>
-              <a
-                href={joinUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-3 inline-flex items-center gap-1 text-xs text-muted underline-offset-4 hover:underline"
-              >
-                参加ページを開く <ExternalLink className="size-3" />
+              <a href={joinUrl} target="_blank" rel="noreferrer" className="link mt-4 text-sm">
+                参加ページを開く <ExternalLink className="size-3.5" />
               </a>
             </section>
 
-            <div className="space-y-5">
+            <div className="space-y-6">
               {/* 数字 */}
-              <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <Stat label="参加者" value={guests.length} unit="人" />
-                <Stat label="撮影枚数" value={photoCount} unit="枚" />
-                <div className="col-span-2 rounded-3xl border border-line bg-card p-5 sm:col-span-1">
-                  <p className="text-xs text-muted">1人あたり上限</p>
-                  <p className="mt-2 font-serif text-4xl tabular-nums">
-                    {event.max_photos_per_guest}
-                    <span className="ml-1 text-base text-muted">枚</span>
-                  </p>
-                </div>
+              <section className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl bg-separator">
+                <Counter label="参加者" value={guests.length} unit="人" />
+                <Counter label="撮影枚数" value={photoCount} unit="枚" />
+                <Counter label="1人あたり" value={event.max_photos_per_guest} unit="枚" />
               </section>
 
               {/* 現像 */}
-              <section className="rounded-3xl border border-line bg-card p-6">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="size-4 text-accent" />
-                  <h2 className="text-sm font-medium">現像</h2>
-                  <span
-                    className={`ml-auto rounded-full px-2.5 py-1 text-[11px] ${
-                      revealed ? "bg-accent/10 text-accent" : "bg-paper-2 text-muted"
-                    }`}
-                  >
+              <section>
+                <div className="mb-2 flex items-center justify-between px-4">
+                  <h2 className="text-[13px] text-label-2">現像</h2>
+                  <span className={`text-[13px] font-semibold ${revealed ? "text-teal-light" : "text-accent"}`}>
                     {revealed ? "公開中" : "現像中"}
                   </span>
                 </div>
-                {event.reveal_at && !revealed ? (
-                  <>
-                    <p className="mt-3 text-sm text-muted">{formatDateTime(event.reveal_at)} に一斉公開</p>
-                    <div className="mt-6">
-                      <CountdownTimer target={event.reveal_at} onComplete={() => setNow(Date.now())} />
-                    </div>
-                    <div className="mt-6 flex justify-center">
-                      {confirmReveal ? (
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-muted">全員に公開します。よろしいですか？</span>
-                          <button type="button" onClick={revealNow} className="btn-primary">
-                            今すぐ現像
+                <div className="rounded-2xl bg-surface p-5">
+                  {event.reveal_at && !revealed ? (
+                    <>
+                      <p className="text-[15px] text-label-2">{formatDateTime(event.reveal_at)} に公開</p>
+                      <div className="mt-4">
+                        <CountdownTimer target={event.reveal_at} onComplete={() => setNow(Date.now())} />
+                      </div>
+                      <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                        {confirmReveal ? (
+                          <>
+                            <span className="w-full text-center text-sm text-label-2">全員に公開します。よろしいですか？</span>
+                            <button type="button" onClick={revealNow} className="btn-primary h-11">
+                              今すぐ現像する
+                            </button>
+                            <button type="button" onClick={() => setConfirmReveal(false)} className="btn-glass h-11 px-5">
+                              やめる
+                            </button>
+                          </>
+                        ) : (
+                          <button type="button" onClick={() => setConfirmReveal(true)} className="btn-glass h-11 px-5">
+                            今すぐ現像する
                           </button>
-                          <button type="button" onClick={() => setConfirmReveal(false)} className="btn-ghost">
-                            やめる
-                          </button>
-                        </div>
-                      ) : (
-                        <button type="button" onClick={() => setConfirmReveal(true)} className="btn-ghost">
-                          今すぐ現像する
-                        </button>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <p className="mt-3 text-sm text-muted">
-                    写真はギャラリーで公開されています。新しく撮影された写真もリアルタイムで追加されます。
-                  </p>
-                )}
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-[15px] leading-relaxed text-label-2">
+                      写真はギャラリーで公開中です。新しく撮られた写真も、すぐに追加されます。
+                    </p>
+                  )}
+                </div>
               </section>
 
               {/* 参加者一覧 */}
-              <section className="rounded-3xl border border-line bg-card p-6">
-                <div className="flex items-center gap-2">
-                  <Users className="size-4 text-muted" />
-                  <h2 className="text-sm font-medium">参加者</h2>
-                  <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-muted">
-                    <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
-                    リアルタイム更新
+              <section>
+                <div className="mb-2 flex items-center justify-between px-4">
+                  <h2 className="text-[13px] text-label-2">参加者</h2>
+                  <span className="inline-flex items-center gap-1.5 text-[13px] text-label-2">
+                    <span className="size-1.5 animate-pulse rounded-full bg-teal-light" />
+                    自動で更新
                   </span>
                 </div>
                 {guests.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted">まだ参加者はいません。QRコードを共有しましょう。</p>
+                  <div className="rounded-2xl bg-surface px-5 py-8 text-center text-[15px] text-label-2">
+                    まだ誰も参加していません。QRコードを置いてみましょう。
+                  </div>
                 ) : (
-                  <ul className="mt-4 divide-y divide-line">
+                  <ul className="group-list">
                     {[...guests].reverse().map((g) => (
-                      <li key={g.id} className="flex items-center gap-3 py-2.5 text-sm">
+                      <li key={g.id} className="group-row">
                         <span className="min-w-0 flex-1 truncate">{g.nickname}</span>
-                        <span className="text-xs text-muted">{formatTime(g.created_at)} 参加</span>
-                        <span className="w-24 text-right">
-                          <span className="font-medium tabular-nums">{g.photoCount}</span>
-                          <span className="text-muted"> / {event.max_photos_per_guest}枚</span>
+                        <span className="text-[13px] text-label-3">{formatTime(g.created_at)}</span>
+                        <span className="w-16 text-right text-label-2 tabular-nums">
+                          {g.photoCount} / {event.max_photos_per_guest}
                         </span>
                       </li>
                     ))}
@@ -302,33 +292,42 @@ export default function AdminEventPage() {
         </div>
       </main>
 
-      {/* ============ 印刷用（テーブル設置カード） ============ */}
-      <section className="hidden print:flex print:min-h-[260mm] print:flex-col print:items-center print:justify-center print:text-center">
-        <p style={{ letterSpacing: "0.35em" }} className="text-sm">
-          SHARE YOUR MOMENTS
-        </p>
-        <h1 className="mt-4 font-serif text-4xl">{event.title}</h1>
-        <p className="mt-6 text-lg">スマホのカメラでQRコードを読み取って、</p>
-        <p className="text-lg">今日の写真を撮ってください。</p>
-        <div className="mt-10">{joinUrl && <QRCodeDisplay value={joinUrl} size={320} className="shadow-none" />}</div>
-        <p className="mt-8 text-base">
-          ひとり {event.max_photos_per_guest} 枚まで
-          {event.reveal_at ? `・${formatDateTime(event.reveal_at)} に一斉現像` : ""}
-        </p>
-        <p className="mt-2 text-xs">アプリのインストール・会員登録は不要です</p>
+      {/* ============ 印刷用（卓上カード） ============ */}
+      <section className="hidden min-h-[265mm] flex-col items-center px-10 pt-12 pb-10 text-center text-ink print:flex">
+        <Wordmark size="md" tone="light" />
+        <h1 className="mt-6 text-5xl leading-tight font-bold tracking-[-0.025em]">撮って、待って、現像。</h1>
+        <p className="mt-3 text-xl text-muted">{event.title} の、今日だけのカメラ。</p>
+        <CameraIllustration className="mt-14 max-w-[330px]" shots={event.max_photos_per_guest} spotlight={false} />
+        <div className="flex-1" />
+        <div className="flex items-center gap-7 rounded-3xl bg-[#f5f5f7] p-6 text-left">
+          <QRCodeDisplay value={joinUrl} size={170} className="shadow-none" />
+          <div className="flex flex-col gap-2.5">
+            <p className="text-2xl leading-snug font-bold">
+              スマホのカメラで
+              <br />
+              読み取ってください。
+            </p>
+            <p className="text-sm leading-relaxed text-muted">
+              ひとり{event.max_photos_per_guest}枚まで。
+              {event.reveal_at ? `現像は ${formatDateTime(event.reveal_at)}。` : ""}
+              <br />
+              アプリも登録もいりません。
+            </p>
+          </div>
+        </div>
       </section>
     </>
   );
 }
 
-function Stat({ label, value, unit }: { label: string; value: number; unit: string }) {
+function Counter({ label, value, unit }: { label: string; value: number; unit: string }) {
   return (
-    <div className="rounded-3xl border border-line bg-card p-5">
-      <p className="text-xs text-muted">{label}</p>
-      <p className="mt-2 font-serif text-4xl tabular-nums">
-        {value}
-        <span className="ml-1 text-base text-muted">{unit}</span>
-      </p>
+    <div className="flex flex-col items-center bg-surface px-2 py-5">
+      <span className="text-[13px] text-label-2">{label}</span>
+      <span className="mt-1.5 flex items-baseline gap-0.5">
+        <span className="text-[40px] leading-none font-semibold tracking-[-0.03em] tabular-nums">{value}</span>
+        <span className="text-[13px] text-label-2">{unit}</span>
+      </span>
     </div>
   );
 }

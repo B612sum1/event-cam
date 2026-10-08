@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Loader2, RefreshCw, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, RefreshCw, Share } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { formatTime, toFriendlyError } from "@/lib/utils/format";
 import { PHOTO_BUCKET, type GalleryPhoto, type PhotoRow } from "@/types";
@@ -155,23 +155,18 @@ export function PhotoGallery({ eventId, eventTitle }: Props) {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20 text-muted">
+      <div className="flex justify-center py-20 text-label-3">
         <Loader2 className="size-6 animate-spin" aria-label="読み込み中" />
       </div>
     );
   }
 
   if (error) {
-    return <p className="py-16 text-center text-sm text-danger">{error}</p>;
+    return <p className="px-5 py-16 text-center text-sm text-danger">{error}</p>;
   }
 
   const refreshButton = (
-    <button
-      type="button"
-      onClick={refresh}
-      disabled={refreshing}
-      className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-muted ring-1 ring-line disabled:opacity-50"
-    >
+    <button type="button" onClick={refresh} disabled={refreshing} className="btn-glass" aria-label="最新の写真を読み込む">
       <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
       更新
     </button>
@@ -179,9 +174,9 @@ export function PhotoGallery({ eventId, eventTitle }: Props) {
 
   if (photos.length === 0) {
     return (
-      <div className="flex flex-col items-center py-20 text-center">
-        <p className="font-serif text-lg">まだ写真がありません</p>
-        <p className="mt-2 mb-5 text-sm text-muted">撮影された写真は、ここにすぐ並びます。</p>
+      <div className="flex flex-col items-center px-5 py-20 text-center">
+        <p className="text-[22px] font-bold tracking-[-0.01em]">まだ1枚もありません。</p>
+        <p className="mt-2 mb-6 text-[15px] text-label-2">撮った写真は、ここにすぐ並びます。</p>
         {refreshButton}
       </div>
     );
@@ -189,31 +184,42 @@ export function PhotoGallery({ eventId, eventTitle }: Props) {
 
   return (
     <>
-      <div className="mb-3 flex items-center justify-between px-1">
-        <p className="text-xs tracking-wider text-muted">{photos.length}枚の写真</p>
-        {refreshButton}
+      <div className="px-5 pt-2.5 pb-[18px]">
+        <h1 className="large-title">現像できました。</h1>
+        <div className="mt-1.5 flex items-center justify-between gap-3">
+          <p className="text-[15px] text-label-2">
+            {new Set(photos.map((p) => p.guest_id)).size}人が撮った、{photos.length}コマ。
+          </p>
+          {refreshButton}
+        </div>
       </div>
-      <ul className="grid grid-cols-3 gap-1 sm:grid-cols-4 sm:gap-2 lg:grid-cols-5">
-        {photos.map((p, i) => (
-          <li key={p.id} className="animate-fade-in">
-            <button
-              type="button"
-              onClick={() => setSelected(i)}
-              className="group relative block w-full overflow-hidden rounded-[3px] bg-paper-2 focus-visible:outline-2 focus-visible:outline-accent"
-              style={{ aspectRatio: "3 / 4" }}
-              aria-label={`${p.nickname}さんの写真を拡大`}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={p.url}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-              />
-            </button>
-          </li>
-        ))}
+
+      {/* ベタ焼き（コンタクトシート）：横に並んだコマがフィルムのストリップになる */}
+      <ul className="safe-bottom grid grid-cols-3 gap-y-2 sm:grid-cols-4 lg:grid-cols-5">
+        {photos.map((p, i) => {
+          const frame = photos.length - i; // 撮影順のコマ番号
+          return (
+            <li key={p.id} className="animate-fade-in bg-film px-[5px] sm:px-2">
+              <Sprockets />
+              <p className="cond flex justify-between px-0.5 pb-1 text-[11px] leading-none text-edge/90">
+                <span>▸{frame}</span>
+                <span>{frame}A</span>
+              </p>
+              <button
+                type="button"
+                onClick={() => setSelected(i)}
+                className="group relative block w-full overflow-hidden rounded-[2px] bg-black"
+                style={{ aspectRatio: "3 / 4" }}
+                aria-label={`${frame}コマ目、${p.nickname}さんの写真を開く`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+              </button>
+              <p className="truncate px-0.5 pt-1 text-[10px] leading-tight text-edge/80">{p.nickname}</p>
+              <Sprockets />
+            </li>
+          );
+        })}
       </ul>
 
       {selected !== null && photos[selected] && (
@@ -302,7 +308,7 @@ function PhotoModal({ photos, index, eventTitle, onChange, onClose }: ModalProps
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-black text-white animate-fade-in"
+      className="fixed inset-0 z-50 flex flex-col bg-bg animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-label="写真の拡大表示"
@@ -315,72 +321,77 @@ function PhotoModal({ photos, index, eventTitle, onChange, onClose }: ModalProps
         touchStartX.current = null;
       }}
     >
-      <header className="safe-top flex items-center justify-between gap-3 px-4 pb-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{photo.nickname}</p>
-          <p className="text-xs text-white/50">
-            {formatTime(photo.created_at)}・{index + 1} / {photos.length}
+      <header className="safe-top grid grid-cols-[1fr_auto_1fr] items-center px-3 pb-2">
+        <button type="button" onClick={onClose} className="link h-11 justify-self-start px-1">
+          <ChevronLeft className="size-5" />
+          ベタ焼き
+        </button>
+        <div className="flex flex-col items-center">
+          <p className="max-w-[50vw] truncate text-[15px] font-semibold">{photo.nickname}</p>
+          <p className="text-[11px] text-label-2">
+            {photos.length - index}コマ目　{formatTime(photo.created_at)}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="閉じる"
-          className="grid size-10 place-items-center rounded-full bg-white/10"
-        >
-          <X className="size-5" />
-        </button>
+        <span />
       </header>
 
       <div className="relative flex min-h-0 flex-1 items-center justify-center px-2" onClick={onClose}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        {/* プリントした写真のような白フチ */}
+        <figure
           key={photo.id}
-          src={photo.url}
-          alt={`${photo.nickname}さんが撮影した写真`}
-          className="max-h-full max-w-full rounded-[2px] object-contain animate-fade-in"
+          className="relative animate-fade-in rounded-[2px] bg-sticker p-3 pb-[42px]"
           onClick={(e) => e.stopPropagation()}
-        />
-        {index > 0 && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              prev();
-            }}
-            aria-label="前の写真"
-            className="absolute left-3 hidden size-11 place-items-center rounded-full bg-white/10 sm:grid"
-          >
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={photo.url}
+            alt={`${photo.nickname}さんが撮影した写真`}
+            className="block max-h-[calc(100dvh-15rem)] w-auto max-w-[calc(100vw-3rem)] object-contain"
+          />
+          <figcaption className="absolute inset-x-3 bottom-2.5 flex items-baseline justify-between text-ink sm:bottom-3.5">
+            <span className="truncate text-xs font-semibold">{eventTitle}</span>
+            <span className="cond text-sm text-muted">No.{photos.length - index}</span>
+          </figcaption>
+        </figure>
+      </div>
+
+      <footer className="safe-bottom flex flex-col items-center px-5 pt-3">
+        <div className="flex w-full max-w-sm items-center justify-around">
+          <button type="button" onClick={prev} disabled={index === 0} aria-label="前の写真" className="grid size-11 place-items-center disabled:opacity-30">
             <ChevronLeft className="size-6" />
           </button>
-        )}
-        {index < photos.length - 1 && (
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              next();
-            }}
+            onClick={() => void save()}
+            disabled={saving}
+            aria-label="写真を保存・共有"
+            className="grid size-11 place-items-center text-accent disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="size-6 animate-spin" /> : <Share className="size-6" />}
+          </button>
+          <button
+            type="button"
+            onClick={next}
+            disabled={index === photos.length - 1}
             aria-label="次の写真"
-            className="absolute right-3 hidden size-11 place-items-center rounded-full bg-white/10 sm:grid"
+            className="grid size-11 place-items-center disabled:opacity-30"
           >
             <ChevronRight className="size-6" />
           </button>
-        )}
-      </div>
-
-      <footer className="safe-bottom flex flex-col items-center gap-2 px-4 pt-4">
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={saving}
-          className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-black disabled:opacity-60"
-        >
-          {saving ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          写真を保存
-        </button>
-        {saveError && <p className="text-xs text-red-300">{saveError}</p>}
+        </div>
+        {saveError && <p className="mt-1 text-xs text-danger">{saveError}</p>}
       </footer>
     </div>
+  );
+}
+
+/** フィルムの送り穴 */
+function Sprockets() {
+  return (
+    <div
+      aria-hidden
+      className="my-1 h-2.5 bg-[repeating-linear-gradient(90deg,transparent_0_5px,rgb(233_220_194/0.8)_5px_13px,transparent_13px_18px)] [mask:linear-gradient(#000_0_0)]"
+      style={{ borderRadius: 2 }}
+    />
   );
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarDays, Loader2, RefreshCcw, SwitchCamera } from "lucide-react";
-import { applyFilmEffect, formatFilmDate } from "@/lib/utils/filmEffect";
+import { Loader2, RefreshCcw, SwitchCamera } from "lucide-react";
+import { SegmentDate } from "@/components/SegmentDate";
+import { applyFilmEffect } from "@/lib/utils/filmEffect";
 import { compressImage, type CompressedImage } from "@/lib/utils/imageCompression";
 
 /** ファインダーの縦横比（インスタントフィルム風の縦長 3:4） */
@@ -12,15 +13,6 @@ const MAX_CAPTURE_EDGE = 1920;
 
 type Facing = "environment" | "user";
 
-const DATE_STAMP_KEY = "event-cam:date-stamp";
-
-function loadDateStampPref(): boolean {
-  try {
-    return window.localStorage.getItem(DATE_STAMP_KEY) !== "off";
-  } catch {
-    return true;
-  }
-}
 
 type CameraError =
   | { kind: "insecure" }
@@ -54,19 +46,13 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
   const [processing, setProcessing] = useState(false);
   const [flashKey, setFlashKey] = useState(0);
   const [ejected, setEjected] = useState<{ key: number; url: string } | null>(null);
-  // このコンポーネントはクライアントでの読み込み完了後にしか描画されないので、初期値で localStorage を読んでよい
-  const [dateStamp, setDateStamp] = useState<boolean>(loadDateStampPref);
-
-  const toggleDateStamp = () => {
-    setDateStamp((on) => {
-      try {
-        window.localStorage.setItem(DATE_STAMP_KEY, on ? "off" : "on");
-      } catch {
-        /* noop */
-      }
-      return !on;
-    });
-  };
+  const [windKey, setWindKey] = useState(0);
+  // 日付は撮影した瞬間の日時で自動的に入る（ゲストは変更できない）。表示用に1分ごとに更新
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // ---- カメラ起動 / 停止 ------------------------------------------------
   useEffect(() => {
@@ -182,7 +168,7 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
       // プレビューはインカメラ時に鏡像表示しているが、保存する写真は正像にする（iOS 標準カメラと同じ）
       ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
       // フィルムカメラ風の色・粒子・周辺減光・光漏れ・日付を焼き込む
-      applyFilmEffect(ctx, canvas.width, canvas.height, { date: dateStamp ? new Date() : null });
+      applyFilmEffect(ctx, canvas.width, canvas.height, { date: new Date() });
 
       const raw = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", 0.92),
@@ -193,11 +179,12 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
       const ok = await onCapture(compressed);
       if (ok) {
         setEjected({ key: Date.now(), url: URL.createObjectURL(compressed.file) });
+        setWindKey((k) => k + 1); // 巻き上げダイヤルを回す
       }
     } finally {
       setProcessing(false);
     }
-  }, [canShoot, onCapture, dateStamp]);
+  }, [canShoot, onCapture]);
 
   // PC ではスペースキーでも撮影できる
   useEffect(() => {
@@ -212,14 +199,12 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
   }, [shoot]);
 
   // ---- 描画 --------------------------------------------------------------
-  const used = maxPhotos - remaining;
-
   return (
     <div className="flex w-full flex-1 flex-col items-center">
       {/* ファインダー */}
-      <div className="relative w-full max-w-md px-5">
+      <div className="relative w-full max-w-md px-3">
         <div
-          className="relative w-full overflow-hidden rounded-[22px] bg-black shadow-[inset_0_0_0_1px_rgb(255_255_255/0.06),0_20px_50px_-20px_rgb(0_0_0/0.8)]"
+          className="relative w-full overflow-hidden rounded-[22px] bg-[#0d0c0b]"
           style={{ aspectRatio: `${FRAME_ASPECT}` }}
         >
           <video
@@ -234,37 +219,29 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
             playsInline
           />
 
-          {/* フィルム風プレビュー：周辺減光 + 粒子 + 日付 */}
+          {/* フィルム風プレビュー：周辺減光 + 粒子 + 日付（写真に入る日付と同じ位置・形） */}
           {ready && (
             <>
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,rgb(0_0_0/0.38)_100%)]" />
-              <div className="paper-grain pointer-events-none absolute inset-0 opacity-70 mix-blend-overlay" />
-              {dateStamp && (
-                <span
-                  className="pointer-events-none absolute right-[6%] bottom-[5%] font-bold tracking-wide text-[#ffc078]"
-                  style={{
-                    fontFamily: '"DIN Condensed", "DIN Alternate", "Arial Narrow", "Helvetica Neue", monospace',
-                    fontSize: "clamp(16px, 5.5vw, 26px)",
-                    textShadow: "0 0 6px rgb(255 90 0 / 0.9), 0 0 2px rgb(255 120 40 / 0.9)",
-                  }}
-                >
-                  {formatFilmDate(new Date())}
-                </span>
-              )}
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_52%,rgb(0_0_0/0.38)_100%)]" />
+              <div className="film-grain pointer-events-none absolute inset-0 opacity-60 mix-blend-overlay" />
+              <SegmentDate date={now} height={16} className="pointer-events-none absolute right-[9%] bottom-[6%]" />
             </>
           )}
 
-          {/* 四隅のフレーム */}
-          <div className="pointer-events-none absolute inset-4">
-            {["left-0 top-0 border-l border-t", "right-0 top-0 border-r border-t", "left-0 bottom-0 border-l border-b", "right-0 bottom-0 border-r border-b"].map(
-              (pos) => (
-                <span key={pos} className={`absolute size-6 border-white/70 ${pos}`} />
-              ),
-            )}
-          </div>
+          {hasMultipleCameras && ready && (
+            <button
+              type="button"
+              onClick={switchCamera}
+              disabled={processing}
+              aria-label="インカメラ・外カメラを切り替え"
+              className="absolute top-3 right-3 grid size-11 place-items-center rounded-full bg-black/40 text-white backdrop-blur-sm transition active:scale-95 disabled:opacity-40"
+            >
+              <SwitchCamera className="size-5" />
+            </button>
+          )}
 
           {!ready && !error && (
-            <div className="absolute inset-0 flex items-center justify-center text-white/60">
+            <div className="absolute inset-0 flex items-center justify-center text-label-3">
               <Loader2 className="size-7 animate-spin" aria-label="カメラを起動中" />
             </div>
           )}
@@ -272,9 +249,9 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
           {error && <CameraErrorPanel error={error} onRetry={retry} />}
 
           {remaining <= 0 && ready && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 px-8 text-center text-white">
-              <p className="font-serif text-xl">フィルムを使い切りました</p>
-              <p className="text-sm text-white/70"><span className="inline-block">たくさん撮ってくれてありがとう。</span><span className="inline-block">現像をお楽しみに。</span></p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/72 px-8 text-center">
+              <p className="text-[22px] font-bold tracking-[-0.01em]">撮り終えました。</p>
+              <p className="text-sm text-label-2">あとは、現像を待つだけ。</p>
             </div>
           )}
 
@@ -288,7 +265,7 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
         {ejected && (
           <div
             key={ejected.key}
-            className="pointer-events-none absolute -bottom-6 left-8 w-24 animate-eject rounded-[3px] bg-[#fbf8f1] p-1.5 pb-5 shadow-xl"
+            className="pointer-events-none absolute -bottom-6 left-7 w-24 animate-eject rounded-[3px] bg-sticker p-1.5 pb-5 shadow-xl"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={ejected.url} alt="" className="aspect-[3/4] w-full object-cover blur-[6px] brightness-75 sepia" />
@@ -296,67 +273,70 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
         )}
       </div>
 
-      {/* 残り枚数（フィルムカウンター） */}
-      <div className="mt-6 flex items-center gap-3 text-white/80">
-        <span className="font-mono text-[11px] tracking-[0.25em] text-white/40">EXP</span>
-        <span className="rounded-md bg-black/40 px-3 py-1 font-mono text-2xl tabular-nums tracking-wider text-[#f3c87a] shadow-inner">
-          {String(Math.max(remaining, 0)).padStart(2, "0")}
-        </span>
-        <span className="text-xs text-white/50">
-          残り / {maxPhotos}枚（{used}枚撮影済み）
-        </span>
-      </div>
-
-      {/* 操作部 */}
-      <div className="mt-auto grid w-full max-w-md grid-cols-3 items-center px-8 pt-8">
+      {/* 操作部：日付（表示のみ）／ シャッター ／ フィルムカウンター + 巻き上げダイヤル */}
+      <div className="mt-auto grid w-full max-w-md grid-cols-[1fr_auto_1fr] items-center gap-3 px-5 pt-8">
         <div className="flex justify-start">
-          <button
-            type="button"
-            onClick={toggleDateStamp}
-            aria-pressed={dateStamp}
-            aria-label={dateStamp ? "日付を入れない" : "日付を入れる"}
-            className={`flex h-12 items-center gap-1.5 rounded-full px-3.5 text-xs ring-1 transition active:scale-95 ${
-              dateStamp ? "bg-[#ff9a3c]/15 text-[#ffc078] ring-[#ff9a3c]/40" : "bg-white/10 text-white/60 ring-white/15"
-            }`}
-          >
-            <CalendarDays className="size-4" />
-            {dateStamp ? "日付ON" : "日付OFF"}
-          </button>
+          {/* 日付は撮影日時で自動的に決まり、変更できない */}
+          <span className="flex h-11 items-center rounded-full bg-white/[0.12] px-3.5">
+            <SegmentDate date={now} height={14} />
+          </span>
         </div>
-        <div className="flex justify-center">
-          <button
-            type="button"
-            onClick={() => void shoot()}
-            disabled={!canShoot}
-            aria-label="シャッター"
-            className="group relative grid size-20 place-items-center rounded-full bg-white/10 p-1.5 ring-1 ring-white/25 transition active:scale-95 disabled:opacity-40 touch-manipulation"
-          >
-            <span className="grid size-full place-items-center rounded-full bg-[#ede6da] shadow-[inset_0_-4px_0_rgb(0_0_0/0.15)] transition group-active:shadow-none">
-              {processing ? (
-                <Loader2 className="size-6 animate-spin text-body" />
-              ) : (
-                <span className="size-5 rounded-full bg-accent shadow-[inset_0_1px_2px_rgb(0_0_0/0.35)]" />
-              )}
-            </span>
-          </button>
-        </div>
+
+        <button
+          type="button"
+          onClick={() => void shoot()}
+          disabled={!canShoot}
+          aria-label={`シャッターを切る（残り${Math.max(remaining, 0)}枚）`}
+          className="grid size-[82px] touch-manipulation place-items-center rounded-full border-4 border-white p-1 transition active:scale-[0.95] disabled:opacity-35"
+        >
+          <span className="grid size-full place-items-center rounded-full bg-white">
+            {processing && <Loader2 className="size-6 animate-spin text-black" />}
+          </span>
+        </button>
+
         <div className="flex justify-end">
-          {hasMultipleCameras && (
-            <button
-              type="button"
-              onClick={switchCamera}
-              disabled={processing}
-              aria-label="カメラを切り替え"
-              className="grid size-12 place-items-center rounded-full bg-white/10 text-white/85 ring-1 ring-white/15 transition active:scale-95 disabled:opacity-40"
-            >
-              <SwitchCamera className="size-5" />
-            </button>
-          )}
+          <div className="flex h-[50px] items-center gap-1.5 rounded-full bg-white/[0.12] pr-2 pl-1">
+            <FilmCounter remaining={Math.max(remaining, 0)} max={maxPhotos} />
+            <span
+              key={windKey}
+              aria-hidden
+              className={`h-[34px] w-3.5 rounded-[4px] bg-[repeating-linear-gradient(180deg,#4a4743_0_3px,#161514_3px_6px)] shadow-[inset_2px_0_2px_rgb(255_255_255/0.12),inset_-2px_0_2px_rgb(0_0_0/0.7)] ${
+                windKey > 0 ? "animate-wind" : ""
+              }`}
+            />
+          </div>
         </div>
       </div>
 
       <canvas ref={canvasRef} className="hidden" />
     </div>
+  );
+}
+
+/** 使い捨てカメラの小窓のような、数字が回るフィルムカウンター */
+function FilmCounter({ remaining, max }: { remaining: number; max: number }) {
+  const ROW = 24; // px
+  const SIZE = 42;
+  const numbers = Array.from({ length: max + 1 }, (_, i) => max - i); // max, max-1, ... 0
+  const offset = (max - remaining) * ROW;
+  return (
+    <span
+      className="relative block overflow-hidden rounded-full bg-[linear-gradient(180deg,#9e9a90,#f2efe6_32%,#f2efe6_68%,#9e9a90)]"
+      style={{ width: SIZE, height: SIZE }}
+      role="img"
+      aria-label={`残り${remaining}枚`}
+    >
+      <span
+        className="absolute inset-x-0 transition-transform duration-500 ease-out"
+        style={{ transform: `translateY(${-offset + (SIZE - ROW) / 2}px)` }}
+      >
+        {numbers.map((n) => (
+          <span key={n} className="cond flex items-center justify-center text-[22px] leading-none text-ink" style={{ height: ROW }}>
+            {n}
+          </span>
+        ))}
+      </span>
+    </span>
   );
 }
 
@@ -385,14 +365,14 @@ function CameraErrorPanel({ error, onRetry }: { error: CameraError; onRetry: () 
   }[error.kind];
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-body px-8 text-center text-white">
-      <p className="font-serif text-lg">{content.title}</p>
-      <p className="text-sm leading-relaxed text-white/60">{content.body}</p>
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0d0c0b] px-8 text-center">
+      <p className="text-lg font-bold">{content.title}</p>
+      <p className="text-sm leading-relaxed text-label-2">{content.body}</p>
       {error.kind !== "insecure" && (
         <button
           type="button"
           onClick={onRetry}
-          className="mt-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2.5 text-sm ring-1 ring-white/20"
+          className="btn-glass mt-2 h-11 px-5"
         >
           <RefreshCcw className="size-4" /> 再試行
         </button>

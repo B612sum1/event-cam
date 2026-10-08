@@ -7,7 +7,8 @@ type Props = {
   target: string;
   /** 0 になった瞬間に一度だけ呼ばれる */
   onComplete?: () => void;
-  tone?: "paper" | "dark";
+  /** large：大きなシステム書体の数字 / lcd：オレンジの長体数字 */
+  tone?: "large" | "lcd";
 };
 
 type Parts = { days: number; hours: number; minutes: number; seconds: number };
@@ -25,7 +26,7 @@ function diffParts(ms: number): Parts {
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /** 現像までのカウントダウン（サーバー描画時は「--」を出してハイドレーションずれを防ぐ） */
-export function CountdownTimer({ target, onComplete, tone = "paper" }: Props) {
+export function CountdownTimer({ target, onComplete, tone = "large" }: Props) {
   const [remaining, setRemaining] = useState<number | null>(null);
   const completedRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
@@ -64,19 +65,23 @@ export function CountdownTimer({ target, onComplete, tone = "paper" }: Props) {
         { label: "秒", value: "--" },
       ];
 
-  const sub = tone === "dark" ? "text-white/50" : "text-muted";
+  const isLcd = tone === "lcd";
+  const big = units.length > 3 ? "text-[46px]" : isLcd ? "text-[56px]" : "text-[64px]";
 
   return (
-    <div className="flex items-end justify-center gap-3 sm:gap-5" role="timer" aria-live="off">
-      {units.map((u, i) => (
-        <div key={u.label} className="flex items-end gap-3 sm:gap-5">
-          {i > 0 && <span className={`pb-6 font-serif text-2xl ${sub}`}>:</span>}
-          <div className="flex flex-col items-center">
-            <span className="font-serif text-5xl tabular-nums leading-none tracking-tight sm:text-6xl">
-              {u.value}
-            </span>
-            <span className={`mt-2 text-[11px] tracking-[0.2em] ${sub}`}>{u.label}</span>
-          </div>
+    <div className="flex items-baseline justify-between gap-3" role="timer" aria-live="off">
+      {units.map((u) => (
+        <div key={u.label} className="flex items-baseline gap-1">
+          <span
+            className={
+              isLcd
+                ? `cond ${big} leading-none tabular-nums text-accent`
+                : `${big} leading-none font-semibold tracking-[-0.03em] tabular-nums`
+            }
+          >
+            {u.value}
+          </span>
+          <span className="text-[15px] text-label-2">{u.label}</span>
         </div>
       ))}
     </div>

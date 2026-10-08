@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Camera, Sparkles } from "lucide-react";
+import { Camera } from "lucide-react";
+import { Wordmark } from "@/components/Carton";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { PhotoGallery } from "@/components/PhotoGallery";
 import { StatusScreen } from "@/components/StatusScreen";
@@ -42,37 +43,29 @@ export default function GalleryPage() {
   }, []);
 
   if (state.status === "not-found")
-    return <StatusScreen title="イベントが見つかりません">URLが正しいかご確認ください。</StatusScreen>;
-  if (state.status === "error") return <StatusScreen title="読み込みに失敗しました">{state.message}</StatusScreen>;
+    return <StatusScreen title="イベントが見つかりません">URLが正しいか確認してください。</StatusScreen>;
+  if (state.status === "error") return <StatusScreen title="読み込めませんでした">{state.message}</StatusScreen>;
   if (!event || !canView || revealed === null) return <StatusScreen kind="loading" />;
 
-  const isGuest = state.status === "ready";
+  const guestId = state.status === "ready" ? state.guest.id : null;
 
   return (
-    <main className="paper-grain flex min-h-dvh flex-1 flex-col">
-      <header className="safe-top sticky top-0 z-20 border-b border-line bg-paper/85 px-4 pb-3 backdrop-blur-md sm:px-8">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] tracking-[0.3em] text-gold">GALLERY</p>
-            <h1 className="truncate font-serif text-lg tracking-wide">{event.title}</h1>
-          </div>
-          {isGuest && (
-            <Link
-              href={`/event/${event.id}/camera`}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-body px-4 py-2.5 text-xs font-medium text-white"
-            >
-              <Camera className="size-4" />
-              カメラ
-            </Link>
-          )}
-        </div>
+    <main className="safe-top flex min-h-dvh flex-1 flex-col bg-bg">
+      <header className="mx-auto flex h-[52px] w-full max-w-5xl items-center justify-between px-5">
+        <Wordmark />
+        {guestId && (
+          <Link href={`/event/${event.id}/camera`} className="link h-11">
+            <Camera className="size-[18px]" />
+            カメラ
+          </Link>
+        )}
       </header>
 
-      <div className="mx-auto w-full max-w-5xl flex-1 px-2 py-5 sm:px-8">
+      <div className="mx-auto w-full max-w-5xl flex-1">
         {revealed || !event.reveal_at ? (
           <PhotoGallery eventId={event.id} eventTitle={event.title} />
         ) : (
-          <DevelopingView eventId={event.id} revealAt={event.reveal_at} onComplete={handleRevealComplete} />
+          <DevelopingView eventId={event.id} guestId={guestId} revealAt={event.reveal_at} onComplete={handleRevealComplete} />
         )}
       </div>
     </main>
@@ -80,24 +73,36 @@ export default function GalleryPage() {
 }
 
 // ---------------------------------------------------------------------------
+// 現像前：大きなカウントダウン + 写真屋さんの DPE 袋
 
 function DevelopingView({
   eventId,
+  guestId,
   revealAt,
   onComplete,
 }: {
   eventId: string;
+  guestId: string | null;
   revealAt: string;
   onComplete: () => void;
 }) {
   const [stats, setStats] = useState<EventStats | null>(null);
+  const [mine, setMine] = useState<number | null>(null);
 
   // 何枚現像待ちか（中身は見せず枚数だけ）
   useEffect(() => {
     let cancelled = false;
+    const supabase = getSupabaseBrowserClient();
     const load = async () => {
-      const { data } = await getSupabaseBrowserClient().rpc("get_event_stats", { p_event_id: eventId });
-      if (!cancelled && data?.[0]) setStats(data[0]);
+      const [{ data }, own] = await Promise.all([
+        supabase.rpc("get_event_stats", { p_event_id: eventId }),
+        guestId
+          ? supabase.from("photos").select("id", { count: "exact", head: true }).eq("guest_id", guestId)
+          : Promise.resolve(null),
+      ]);
+      if (cancelled) return;
+      if (data?.[0]) setStats(data[0]);
+      if (own && !own.error) setMine(own.count ?? 0);
     };
     void load();
     const id = window.setInterval(load, 20_000);
@@ -105,59 +110,65 @@ function DevelopingView({
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [eventId]);
+  }, [eventId, guestId]);
 
-  const count = stats?.photo_count ?? 0;
-  const tiles = Math.min(Math.max(count, 9), 24);
+  const reveal = new Date(revealAt);
+  const short = `${reveal.getMonth() + 1}/${reveal.getDate()} ${String(reveal.getHours()).padStart(2, "0")}:${String(
+    reveal.getMinutes(),
+  ).padStart(2, "0")}`;
 
   return (
-    <div className="relative">
-      {/* ぼかしプレビュー：現像液の中のフィルムのような抽象パターン */}
-      <ul className="grid grid-cols-3 gap-1 sm:grid-cols-4 sm:gap-2 lg:grid-cols-6" aria-hidden>
-        {Array.from({ length: tiles }).map((_, i) => (
-          <li
-            key={i}
-            className={`overflow-hidden rounded-[3px] ${i < count ? "" : "opacity-40"}`}
-            style={{ aspectRatio: "3 / 4" }}
-          >
-            <div
-              className="h-full w-full animate-develop blur-xl"
-              style={{
-                animationDelay: `${(i % 7) * 0.35}s`,
-                background: `radial-gradient(circle at ${20 + ((i * 37) % 60)}% ${25 + ((i * 53) % 50)}%, hsl(${
-                  20 + ((i * 47) % 40)
-                } 45% 62%), transparent 60%), radial-gradient(circle at ${70 - ((i * 29) % 40)}% ${
-                  70 - ((i * 17) % 40)
-                }%, hsl(${330 + ((i * 23) % 40)} 30% 45%), transparent 55%), #3a2f2a`,
-              }}
-            />
-          </li>
-        ))}
-      </ul>
+    <div className="safe-bottom mx-auto flex min-h-[calc(100dvh-60px)] max-w-md flex-col px-5">
+      <h1 className="large-title mt-3.5">
+        ただいま、
+        <br />
+        現像中。
+      </h1>
+      <p className="mt-2.5 text-[15px] leading-relaxed text-label-2">
+        {formatDateTime(revealAt)} に、みんなの写真が届きます。
+      </p>
 
-      <div className="absolute inset-0 flex items-start justify-center bg-gradient-to-b from-paper/30 via-paper/60 to-paper px-4 pt-14 sm:items-center sm:pt-0">
-        <div className="w-full max-w-md rounded-3xl border border-line bg-card/90 px-6 py-9 text-center shadow-[0_30px_80px_-40px_rgb(0_0_0/0.45)] backdrop-blur">
-          <span className="mx-auto grid size-11 place-items-center rounded-full bg-accent/10 text-accent">
-            <Sparkles className="size-5" />
+      <div className="mt-8">
+        <CountdownTimer target={revealAt} onComplete={onComplete} />
+      </div>
+
+      {/* DPE袋 */}
+      <div className="flex flex-1 items-center justify-center py-10">
+        <div className="kraft relative h-[250px] w-[300px] -rotate-3 overflow-hidden rounded-md px-5 pt-11 text-[13px] text-teal-ink shadow-[0_30px_50px_-20px_rgb(0_0_0/0.9)]">
+          <div
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-7 bg-kraft-deep/70"
+            style={{ clipPath: "polygon(0 0, 100% 0, 94% 100%, 6% 100%)" }}
+          />
+          <p className="border-b-2 border-teal-ink pb-1.5 text-lg font-bold">現像・プリント</p>
+          {[
+            ["お預かり", stats ? `${stats.photo_count} 枚` : "…"],
+            ["参加", stats ? `${stats.guest_count} 人` : "…"],
+            ["お渡し", short],
+          ].map(([k, v]) => (
+            <div key={k} className="flex gap-3 border-b border-teal-ink/35 py-2.5">
+              <span className="w-14 shrink-0">{k}</span>
+              <span className="font-bold text-ink">{v}</span>
+            </div>
+          ))}
+          <span
+            aria-hidden
+            className="absolute top-[58px] right-[18px] flex size-[70px] rotate-[14deg] flex-col items-center justify-center rounded-full border-[3px] border-tomato/80 text-tomato/90 mix-blend-multiply"
+          >
+            <span className="text-[15px] leading-none font-bold">現像中</span>
+            <span className="cond mt-1 text-[10px]">EVENT CAM</span>
           </span>
-          <p className="mt-4 text-xs tracking-[0.3em] text-gold">NOW DEVELOPING</p>
-          <h2 className="mt-2 font-serif text-2xl tracking-wide">ただいま現像中</h2>
-          <p className="mt-3 text-sm text-muted">{formatDateTime(revealAt)} に一斉公開</p>
-          <div className="mt-8">
-            <CountdownTimer target={revealAt} onComplete={onComplete} />
-          </div>
-          <p className="mt-8 text-sm text-muted">
-            {stats ? (
-              <>
-                <strong className="font-serif text-xl text-ink">{stats.photo_count}</strong> 枚の写真が
-                <strong className="font-serif text-xl text-ink"> {stats.guest_count}</strong> 人から届いています
-              </>
-            ) : (
-              " "
-            )}
-          </p>
         </div>
       </div>
+
+      {guestId && (
+        <div className="group-list">
+          <div className="group-row h-[50px]">
+            <span>あなたが撮った写真</span>
+            <span className="text-label-2">{mine ?? "…"} 枚</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
