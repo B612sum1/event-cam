@@ -52,14 +52,17 @@ export function PhotoGallery({ eventId, eventTitle }: Props) {
         const supabase = getSupabaseBrowserClient();
         const { data, error } = await supabase
           .from("photos")
-          .select("id, event_id, guest_id, storage_path, created_at, guests(nickname)")
+          .select("*, guests(nickname)")
           .eq("event_id", eventId)
           .order("created_at", { ascending: false })
           .limit(PAGE_LIMIT);
         if (error) throw error;
 
         const rows = data ?? [];
-        const urls = rows.length ? await signUrls(rows.map((r) => r.storage_path)) : new Map();
+        // 署名付きURLの発行だけなので転送量はかからない。実際に読み込むのは一覧ではサムネイルだけ
+        const urls = rows.length
+          ? await signUrls(rows.flatMap((r) => (r.thumb_path ? [r.storage_path, r.thumb_path] : [r.storage_path])))
+          : new Map<string, string>();
         const list: GalleryPhoto[] = rows.flatMap((r) => {
           const url = urls.get(r.storage_path);
           const nickname = r.guests?.nickname ?? "ゲスト";
@@ -67,7 +70,8 @@ export function PhotoGallery({ eventId, eventTitle }: Props) {
           if (!url) return [];
           const { guests: _guests, ...photo } = r;
           void _guests;
-          return [{ ...photo, url, nickname }];
+          const thumbUrl = (r.thumb_path && urls.get(r.thumb_path)) || url;
+          return [{ ...photo, url, thumbUrl, nickname }];
         });
         if (!cancelled) {
           setPhotos(list);
@@ -122,12 +126,13 @@ export function PhotoGallery({ eventId, eventTitle }: Props) {
           try {
             const [nickname, urls] = await Promise.all([
               resolveNickname(row.guest_id),
-              signUrls([row.storage_path]),
+              signUrls(row.thumb_path ? [row.storage_path, row.thumb_path] : [row.storage_path]),
             ]);
             const url = urls.get(row.storage_path);
             if (!url) return;
+            const thumbUrl = (row.thumb_path && urls.get(row.thumb_path)) || url;
             setPhotos((prev) =>
-              prev.some((p) => p.id === row.id) ? prev : [{ ...row, url, nickname }, ...prev],
+              prev.some((p) => p.id === row.id) ? prev : [{ ...row, url, thumbUrl, nickname }, ...prev],
             );
             // モーダルで見ている写真がずれないように
             setSelected((s) => (s === null ? s : s + 1));
@@ -213,7 +218,7 @@ export function PhotoGallery({ eventId, eventTitle }: Props) {
                 aria-label={`${frame}コマ目、${p.nickname}さんの写真を開く`}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                <img src={p.thumbUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
               </button>
               <p className="truncate px-0.5 pt-1 text-[10px] leading-tight text-edge/80">{p.nickname}</p>
               <Sprockets />

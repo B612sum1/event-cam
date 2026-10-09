@@ -70,6 +70,7 @@ export type Database = {
           event_id: string;
           guest_id: string;
           storage_path: string;
+          thumb_path: string | null;
           created_at: string;
         };
         Insert: {
@@ -77,6 +78,7 @@ export type Database = {
           event_id: string;
           guest_id: string;
           storage_path: string;
+          thumb_path?: string | null;
           created_at?: string;
         };
         Update: {
@@ -84,6 +86,7 @@ export type Database = {
           event_id?: string;
           guest_id?: string;
           storage_path?: string;
+          thumb_path?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -142,7 +145,10 @@ export type EventStats = Database["public"]["Functions"]["get_event_stats"]["Ret
 
 /** ギャラリー表示用：署名付きURLとニックネームを付与した写真 */
 export type GalleryPhoto = PhotoRow & {
+  /** 元の写真（拡大・保存用） */
   url: string;
+  /** 一覧用の小さい写真（以前の写真で無い場合は元の写真） */
+  thumbUrl: string;
   nickname: string;
 };
 

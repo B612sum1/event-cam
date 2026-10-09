@@ -31,6 +31,7 @@ create table if not exists public.photos (
   event_id     uuid not null references public.events(id) on delete cascade,
   guest_id     uuid not null references public.guests(id) on delete cascade,
   storage_path text not null unique,
+  thumb_path   text unique,                -- 一覧用の小さい写真（長辺320px）
   created_at   timestamptz not null default now()
 );
 
@@ -196,6 +197,7 @@ create policy photos_insert on public.photos for insert to authenticated
   with check (
     public.owns_guest(guest_id)
     and starts_with(storage_path, event_id::text || '/' || guest_id::text || '_')
+    and (thumb_path is null or starts_with(thumb_path, event_id::text || '/' || guest_id::text || '_'))
   );
 
 drop policy if exists photos_delete on public.photos;
@@ -230,7 +232,10 @@ drop policy if exists event_photos_select on storage.objects;
 create policy event_photos_select on storage.objects for select to authenticated
   using (
     bucket_id = 'event-photos'
-    and exists (select 1 from public.photos p where p.storage_path = name)
+    and exists (
+      select 1 from public.photos p
+      where p.storage_path = name or p.thumb_path = name
+    )
   );
 
 -- 削除: アップロードした本人 / 主催者
@@ -242,7 +247,8 @@ create policy event_photos_delete on storage.objects for delete to authenticated
       owner_id = (select auth.uid())::text
       or exists (
         select 1 from public.photos p
-        where p.storage_path = name and public.is_event_owner(p.event_id)
+        where (p.storage_path = name or p.thumb_path = name)
+          and public.is_event_owner(p.event_id)
       )
     )
   );

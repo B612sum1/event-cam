@@ -57,7 +57,7 @@ export default function CameraPage() {
   const remaining = usedCount === null ? 0 : Math.max(0, maxPhotos - usedCount);
 
   const handleCapture = useCallback(
-    async (image: CompressedImage): Promise<boolean> => {
+    async ({ image, thumb }: { image: CompressedImage; thumb: CompressedImage | null }): Promise<boolean> => {
       if (!guest || !event || usedCount === null) return false;
       if (usedCount >= event.max_photos_per_guest) {
         setToast({ id: Date.now(), kind: "error", message: "撮影できる枚数の上限に達しました。" });
@@ -66,23 +66,48 @@ export default function CameraPage() {
 
       setUploading(true);
       const supabase = getSupabaseBrowserClient();
-      const path = `${event.id}/${guest.id}_${Date.now()}.${image.extension}`;
+      const bucket = supabase.storage.from(PHOTO_BUCKET);
+      const base = `${event.id}/${guest.id}_${Date.now()}`;
+      const path = `${base}.${image.extension}`;
+      const uploaded: string[] = [];
 
       try {
-        const { error: uploadError } = await supabase.storage.from(PHOTO_BUCKET).upload(path, image.file, {
+        const { error: uploadError } = await bucket.upload(path, image.file, {
           contentType: image.mimeType,
           cacheControl: "31536000",
           upsert: false,
         });
         if (uploadError) throw uploadError;
+        uploaded.push(path);
 
-        const { error: insertError } = await supabase
+        // 一覧用の小さい写真。失敗しても元の写真で表示できるので、撮影は止めない
+        let thumbPath: string | null = null;
+        if (thumb) {
+          const candidate = `${base}_thumb.${thumb.extension}`;
+          const { error: thumbError } = await bucket.upload(candidate, thumb.file, {
+            contentType: thumb.mimeType,
+            cacheControl: "31536000",
+            upsert: false,
+          });
+          if (!thumbError) {
+            thumbPath = candidate;
+            uploaded.push(candidate);
+          }
+        }
+
+        let { error: insertError } = await supabase
           .from("photos")
-          .insert({ event_id: event.id, guest_id: guest.id, storage_path: path });
+          .insert({ event_id: event.id, guest_id: guest.id, storage_path: path, thumb_path: thumbPath });
+
+        // DB にまだ thumb_path 列が無い（002_thumbnails.sql 未実行）場合は、サムネイル無しで保存する
+        if (insertError && thumbPath && /thumb_path/.test(insertError.message)) {
+          ({ error: insertError } = await supabase
+            .from("photos")
+            .insert({ event_id: event.id, guest_id: guest.id, storage_path: path }));
+          if (!insertError) await bucket.remove([thumbPath]);
+        }
 
         if (insertError) {
-          // DB 側で弾かれた（上限超過など）ら、アップロード済みファイルを片付ける
-          await supabase.storage.from(PHOTO_BUCKET).remove([path]);
           if (insertError.message.includes("photo_limit_reached")) {
             setUsedCount(event.max_photos_per_guest);
           }
@@ -93,6 +118,8 @@ export default function CameraPage() {
         setToast({ id: Date.now(), kind: "success", message: "撮影しました" });
         return true;
       } catch (e) {
+        // DB 側で弾かれた（上限超過など）ら、アップロード済みのファイルを片付ける
+        if (uploaded.length) await bucket.remove(uploaded);
         setToast({ id: Date.now(), kind: "error", message: toFriendlyError(e) });
         return false;
       } finally {

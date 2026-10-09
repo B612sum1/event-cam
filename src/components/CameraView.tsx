@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCcw, SwitchCamera } from "lucide-react";
 import { SegmentDate } from "@/components/SegmentDate";
 import { applyFilmEffect } from "@/lib/utils/filmEffect";
-import { compressImage, type CompressedImage } from "@/lib/utils/imageCompression";
+import { compressImage, createThumbnail, type CompressedImage } from "@/lib/utils/imageCompression";
 
 /** ファインダーの縦横比（インスタントフィルム風の縦長 3:4） */
 const FRAME_ASPECT = 3 / 4;
@@ -30,7 +30,7 @@ type Props = {
    * 圧縮済みの画像を受け取り、保存できたら true を返す。
    * true の場合のみ「フィルムが出てくる」演出を出す。
    */
-  onCapture: (image: CompressedImage) => Promise<boolean>;
+  onCapture: (shot: { image: CompressedImage; thumb: CompressedImage | null }) => Promise<boolean>;
 };
 
 export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props) {
@@ -175,8 +175,12 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
       );
       if (!raw) throw new Error("画像の取得に失敗しました");
 
-      const compressed = await compressImage(raw);
-      const ok = await onCapture(compressed);
+      // 元の写真（拡大・保存用）と、一覧用の小さい写真を作る
+      const [compressed, thumb] = await Promise.all([
+        compressImage(raw),
+        createThumbnail(canvas).catch(() => null),
+      ]);
+      const ok = await onCapture({ image: compressed, thumb });
       if (ok) {
         setEjected({ key: Date.now(), url: URL.createObjectURL(compressed.file) });
         setWindKey((k) => k + 1); // 巻き上げダイヤルを回す

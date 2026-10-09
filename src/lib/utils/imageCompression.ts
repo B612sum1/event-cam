@@ -78,3 +78,28 @@ export async function compressImage(input: Blob): Promise<CompressedImage> {
     extension,
   };
 }
+
+/** 一覧用サムネイルの長辺(px)。スマホの3列表示なら十分な大きさ */
+export const THUMB_MAX_EDGE = 320;
+
+/**
+ * 加工済みの canvas から、一覧用の小さい写真（約15KB）を作る。
+ * 一覧ではこれを表示し、元の写真は拡大・保存のときだけ読み込むことで、転送量を約1/16にする。
+ */
+export async function createThumbnail(source: HTMLCanvasElement): Promise<CompressedImage | null> {
+  const scale = Math.min(1, THUMB_MAX_EDGE / Math.max(source.width, source.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(source.width * scale);
+  canvas.height = Math.round(source.height * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+
+  const useWebp = canEncodeWebp();
+  const mimeType = useWebp ? "image/webp" : "image/jpeg";
+  const extension = useWebp ? "webp" : "jpg";
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mimeType, 0.72));
+  if (!blob || blob.type !== mimeType) return null;
+  return { file: new File([blob], `thumb.${extension}`, { type: mimeType }), mimeType, extension };
+}
