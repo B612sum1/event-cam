@@ -18,7 +18,15 @@ import { CountdownTimer } from "@/components/CountdownTimer";
 import { QRCodeDisplay } from "@/components/QRCodeDisplay";
 import { StatusScreen } from "@/components/StatusScreen";
 import { getCurrentUserId, getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { formatDateTime, formatTime, isRevealed, isUuid, toFriendlyError } from "@/lib/utils/format";
+import {
+  formatDateTime,
+  formatShootWindow,
+  formatTime,
+  getShootingState,
+  isRevealed,
+  isUuid,
+  toFriendlyError,
+} from "@/lib/utils/format";
 import type { EventRow } from "@/types";
 
 type GuestSummary = { id: string; nickname: string; created_at: string; photoCount: number };
@@ -70,7 +78,7 @@ export default function AdminEventPage() {
 
   // 現像状態の表示を定期的に更新
   useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    const id = window.setInterval(() => setNow(Date.now()), 10_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -144,6 +152,36 @@ export default function AdminEventPage() {
     if (!error && data) setState({ status: "ready", event: data });
   };
 
+  // 撮影の締め切り・再開
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [shootError, setShootError] = useState<string | null>(null);
+  const updateShooting = async (patch: { shoot_start_at?: string | null; shoot_end_at: string | null }) => {
+    if (state.status !== "ready") return;
+    setShootError(null);
+    const { data, error } = await getSupabaseBrowserClient()
+      .from("events")
+      .update(patch)
+      .eq("id", state.event.id)
+      .select("*")
+      .single();
+    setConfirmClose(false);
+    if (error) setShootError(toFriendlyError(error));
+    else if (data) {
+      setState({ status: "ready", event: data });
+      setNow(Date.now());
+    }
+  };
+  const closeShootingNow = () => {
+    if (state.status !== "ready") return;
+    const start = state.event.shoot_start_at;
+    // まだ始まっていない場合は、開始時刻も外して「今で締め切り」にする
+    void updateShooting({
+      shoot_end_at: new Date().toISOString(),
+      ...(start && new Date(start).getTime() > Date.now() ? { shoot_start_at: null } : {}),
+    });
+  };
+  const reopenShooting = () => void updateShooting({ shoot_end_at: null });
+
   // ---- 描画 ----------------------------------------------------------------
   if (state.status === "loading") return <StatusScreen kind="loading" />;
   if (state.status === "not-found") return <StatusScreen title="イベントが見つかりません" action={{ href: "/admin/create", label: "イベントを作成" }} />;
@@ -157,6 +195,7 @@ export default function AdminEventPage() {
 
   const { event } = state;
   const revealed = isRevealed(event.reveal_at, now);
+  const shooting = getShootingState(event, now);
   // ここに来るのはクライアントでの読み込み完了後のみなので window を参照してよい
   const siteBase = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || window.location.origin;
   const joinUrl = `${siteBase}/event/${event.id}/join`;
@@ -217,6 +256,50 @@ export default function AdminEventPage() {
                 <Counter label="参加者" value={guests.length} unit="人" />
                 <Counter label="撮影枚数" value={photoCount} unit="枚" />
                 <Counter label="1人あたり" value={event.max_photos_per_guest} unit="枚" />
+              </section>
+
+              {/* 撮影できる時間 */}
+              <section>
+                <div className="mb-2 flex items-center justify-between px-4">
+                  <h2 className="text-[13px] text-label-2">撮影できる時間</h2>
+                  <span
+                    className={`text-[13px] font-semibold ${
+                      shooting === "open" ? "text-teal-light" : shooting === "before" ? "text-accent" : "text-label-3"
+                    }`}
+                  >
+                    {shooting === "open" ? "撮影中" : shooting === "before" ? "開始前" : "締め切り"}
+                  </span>
+                </div>
+                <div className="rounded-2xl bg-surface p-5">
+                  <p className="text-[17px] font-semibold">{formatShootWindow(event.shoot_start_at, event.shoot_end_at)}</p>
+                  <p className="mt-1 text-[13px] text-label-2">
+                    {shooting === "closed"
+                      ? "シャッターは押せなくなっています。"
+                      : "時間外はシャッターが押せません。判定はサーバーの時刻で行います。"}
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    {shooting === "closed" ? (
+                      <button type="button" onClick={reopenShooting} className="btn-glass h-11 px-5">
+                        撮影を再開する
+                      </button>
+                    ) : confirmClose ? (
+                      <>
+                        <span className="w-full text-center text-sm text-label-2">全員の撮影を締め切ります。よろしいですか？</span>
+                        <button type="button" onClick={closeShootingNow} className="btn-primary h-11">
+                          今すぐ締め切る
+                        </button>
+                        <button type="button" onClick={() => setConfirmClose(false)} className="btn-glass h-11 px-5">
+                          やめる
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" onClick={() => setConfirmClose(true)} className="btn-glass h-11 px-5">
+                        今すぐ締め切る
+                      </button>
+                    )}
+                  </div>
+                  {shootError && <p className="mt-2 text-center text-sm text-danger">{shootError}</p>}
+                </div>
               </section>
 
               {/* 現像 */}
@@ -309,6 +392,7 @@ export default function AdminEventPage() {
             </p>
             <p className="text-sm leading-relaxed text-muted">
               ひとり{event.max_photos_per_guest}枚まで。
+              {event.shoot_end_at ? `撮影は ${formatShootWindow(event.shoot_start_at, event.shoot_end_at)}。` : ""}
               {event.reveal_at ? `現像は ${formatDateTime(event.reveal_at)}。` : ""}
               <br />
               アプリも登録もいりません。

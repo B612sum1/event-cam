@@ -11,6 +11,8 @@ export type Database = {
           title: string;
           max_photos_per_guest: number;
           reveal_at: string | null;
+          shoot_start_at: string | null;
+          shoot_end_at: string | null;
           owner_uid: string;
           created_at: string;
         };
@@ -19,6 +21,8 @@ export type Database = {
           title: string;
           max_photos_per_guest?: number;
           reveal_at?: string | null;
+          shoot_start_at?: string | null;
+          shoot_end_at?: string | null;
           owner_uid?: string;
           created_at?: string;
         };
@@ -27,6 +31,8 @@ export type Database = {
           title?: string;
           max_photos_per_guest?: number;
           reveal_at?: string | null;
+          shoot_start_at?: string | null;
+          shoot_end_at?: string | null;
           owner_uid?: string;
           created_at?: string;
         };
@@ -116,6 +122,8 @@ export type Database = {
           title: string;
           max_photos_per_guest: number;
           reveal_at: string | null;
+          shoot_start_at: string | null;
+          shoot_end_at: string | null;
         }[];
       };
       get_event_stats: {
@@ -125,6 +133,7 @@ export type Database = {
       is_event_owner: { Args: { p_event_id: string }; Returns: boolean };
       is_event_guest: { Args: { p_event_id: string }; Returns: boolean };
       is_event_revealed: { Args: { p_event_id: string }; Returns: boolean };
+      is_shooting_open: { Args: { p_event_id: string }; Returns: boolean };
       owns_guest: { Args: { p_guest_id: string }; Returns: boolean };
     };
     Enums: { [_ in never]: never };

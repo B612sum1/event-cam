@@ -26,6 +26,8 @@ type Props = {
   maxPhotos: number;
   /** 親がアップロード中など、シャッターを押せない状態 */
   disabled?: boolean;
+  /** 撮影時間外など、ファインダーに重ねて表示する案内（表示中はシャッターを押せない） */
+  blocked?: { title: string; body: string } | null;
   /**
    * 圧縮済みの画像を受け取り、保存できたら true を返す。
    * true の場合のみ「フィルムが出てくる」演出を出す。
@@ -33,7 +35,7 @@ type Props = {
   onCapture: (shot: { image: CompressedImage; thumb: CompressedImage | null }) => Promise<boolean>;
 };
 
-export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props) {
+export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -136,7 +138,7 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
   };
 
   // ---- 撮影 --------------------------------------------------------------
-  const canShoot = ready && !processing && !disabled && remaining > 0;
+  const canShoot = ready && !processing && !disabled && !blocked && remaining > 0;
 
   const shoot = useCallback(async () => {
     const video = videoRef.current;
@@ -252,7 +254,14 @@ export function CameraView({ remaining, maxPhotos, disabled, onCapture }: Props)
 
           {error && <CameraErrorPanel error={error} onRetry={retry} />}
 
-          {remaining <= 0 && ready && (
+          {blocked && ready && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/72 px-8 text-center">
+              <p className="text-[22px] font-bold tracking-[-0.01em]">{blocked.title}</p>
+              <p className="text-sm text-label-2">{blocked.body}</p>
+            </div>
+          )}
+
+          {!blocked && remaining <= 0 && ready && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/72 px-8 text-center">
               <p className="text-[22px] font-bold tracking-[-0.01em]">撮り終えました。</p>
               <p className="text-sm text-label-2">あとは、現像を待つだけ。</p>

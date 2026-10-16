@@ -9,7 +9,7 @@ import { StatusScreen } from "@/components/StatusScreen";
 import { useEventGuest } from "@/lib/hooks/useEventGuest";
 import { ensureAnonymousUser, getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { saveStoredGuest } from "@/lib/utils/guestStorage";
-import { formatDateTime, isRevealed, toFriendlyError } from "@/lib/utils/format";
+import { formatDateTime, formatShootWindow, getShootingState, isRevealed, toFriendlyError } from "@/lib/utils/format";
 
 export default function JoinPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -58,7 +58,8 @@ export default function JoinPage() {
       if (upsertError) throw upsertError;
 
       saveStoredGuest({ guest_id: guest.id, event_id: event.id, nickname: guest.nickname });
-      router.replace(`/event/${event.id}/camera`);
+      // 撮影時間が終わっていたら、カメラではなくギャラリーへ
+      router.replace(`/event/${event.id}/${getShootingState(event) === "closed" ? "gallery" : "camera"}`);
     } catch (err) {
       setError(toFriendlyError(err));
       setSubmitting(false);
@@ -66,6 +67,7 @@ export default function JoinPage() {
   };
 
   const revealPending = event.reveal_at && !isRevealed(event.reveal_at);
+  const closed = getShootingState(event) === "closed";
 
   return (
     <main className="safe-top safe-bottom mx-auto flex min-h-dvh w-full max-w-md flex-1 flex-col items-center px-5">
@@ -81,6 +83,12 @@ export default function JoinPage() {
         <div className="group-row">
           <span>撮れる枚数</span>
           <span className="text-label-2">{event.max_photos_per_guest}枚</span>
+        </div>
+        <div className="group-row">
+          <span className="shrink-0">撮影できる時間</span>
+          <span className={`text-right ${closed ? "text-danger" : "text-label-2"}`}>
+            {closed ? "終了しました" : formatShootWindow(event.shoot_start_at, event.shoot_end_at)}
+          </span>
         </div>
         <div className="group-row">
           <span>現像</span>
@@ -116,7 +124,7 @@ export default function JoinPage() {
         {error && <p className="px-4 text-sm text-danger">{error}</p>}
         <button type="submit" disabled={submitting} className="btn-primary w-full">
           {submitting && <Loader2 className="size-5 animate-spin" />}
-          {existing ? "カメラに戻る" : "カメラを受け取る"}
+          {closed ? "ギャラリーを見る" : existing ? "カメラに戻る" : "カメラを受け取る"}
         </button>
         <p className="text-center text-xs text-label-3">登録はいりません。このブラウザに保存されます。</p>
       </form>

@@ -8,7 +8,7 @@ import { CameraView } from "@/components/CameraView";
 import { StatusScreen } from "@/components/StatusScreen";
 import { useEventGuest } from "@/lib/hooks/useEventGuest";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { formatDateTime, isRevealed, toFriendlyError } from "@/lib/utils/format";
+import { formatDateTime, formatTime, getShootingState, isRevealed, toFriendlyError } from "@/lib/utils/format";
 import type { CompressedImage } from "@/lib/utils/imageCompression";
 import { PHOTO_BUCKET } from "@/types";
 
@@ -56,9 +56,21 @@ export default function CameraPage() {
   const maxPhotos = event?.max_photos_per_guest ?? 0;
   const remaining = usedCount === null ? 0 : Math.max(0, maxPhotos - usedCount);
 
+  // 撮影できる時間かどうか（開始・終了の時刻をまたいだら自動で切り替わるよう定期的に確認）
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 5_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const shooting = event ? getShootingState(event, nowMs) : "open";
+
   const handleCapture = useCallback(
     async ({ image, thumb }: { image: CompressedImage; thumb: CompressedImage | null }): Promise<boolean> => {
       if (!guest || !event || usedCount === null) return false;
+      if (getShootingState(event) !== "open") {
+        setToast({ id: Date.now(), kind: "error", message: "いまは撮影の時間ではありません。" });
+        return false;
+      }
       if (usedCount >= event.max_photos_per_guest) {
         setToast({ id: Date.now(), kind: "error", message: "撮影できる枚数の上限に達しました。" });
         return false;
@@ -144,6 +156,12 @@ export default function CameraPage() {
   if (!guest || !event || usedCount === null) return <StatusScreen kind="loading" />;
 
   const revealed = isRevealed(event.reveal_at);
+  const blocked =
+    shooting === "before" && event.shoot_start_at
+      ? { title: `撮影は ${formatTime(event.shoot_start_at)} から`, body: "始まるまで、もう少しお待ちください。" }
+      : shooting === "closed"
+        ? { title: "撮影は終了しました。", body: "あとは、現像を待つだけ。" }
+        : null;
 
   return (
     <main className="relative flex min-h-dvh flex-1 flex-col overflow-hidden bg-bg select-none">
@@ -161,6 +179,7 @@ export default function CameraPage() {
       <div className="relative z-10 flex flex-1 flex-col pb-[max(env(safe-area-inset-bottom),1.5rem)]">
         <CameraView
           remaining={remaining}
+          blocked={blocked}
           maxPhotos={maxPhotos}
           disabled={uploading}
           onCapture={handleCapture}
@@ -169,6 +188,12 @@ export default function CameraPage() {
           {revealed || !event.reveal_at
             ? `残り ${remaining} 枚。撮った写真は、すぐギャラリーに並びます。`
             : `残り ${remaining} 枚。現像は ${formatDateTime(event.reveal_at)}。`}
+          {shooting === "open" && event.shoot_end_at && (
+            <>
+              <br />
+              撮影は {formatTime(event.shoot_end_at)} まで
+            </>
+          )}
         </p>
       </div>
 
