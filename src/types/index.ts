@@ -134,6 +134,7 @@ export type Database = {
       is_event_guest: { Args: { p_event_id: string }; Returns: boolean };
       is_event_revealed: { Args: { p_event_id: string }; Returns: boolean };
       is_shooting_open: { Args: { p_event_id: string }; Returns: boolean };
+      is_nickname_taken: { Args: { p_event_id: string; p_nickname: string }; Returns: boolean };
       owns_guest: { Args: { p_guest_id: string }; Returns: boolean };
     };
     Enums: { [_ in never]: never };

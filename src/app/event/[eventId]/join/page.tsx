@@ -19,6 +19,8 @@ export default function JoinPage() {
   const [nickname, setNickname] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 同じ名前の人がいると知らせた名前（もう一度押せばそのまま参加できる）
+  const [duplicateName, setDuplicateName] = useState<string | null>(null);
 
   if (state.status === "loading") return <StatusScreen kind="loading" />;
   if (state.status === "not-found")
@@ -46,6 +48,21 @@ export default function JoinPage() {
       const supabase = getSupabaseBrowserClient();
       const user = await ensureAnonymousUser(supabase);
 
+      // 同じイベントに同じ名前の人がいたら、一度だけ知らせる（止めはしない）
+      const unchanged = existing && existing.nickname === name;
+      if (!unchanged && duplicateName !== name) {
+        const { data: taken, error: checkError } = await supabase.rpc("is_nickname_taken", {
+          p_event_id: event.id,
+          p_nickname: name,
+        });
+        // 確認用の関数がまだ無い（004 未実行）などのときは、確認せずに参加させる
+        if (!checkError && taken) {
+          setDuplicateName(name);
+          setSubmitting(false);
+          return;
+        }
+      }
+
       // 同じ端末で再参加した場合はニックネームだけ更新（unique(event_id, auth_uid)）
       const { data: guest, error: upsertError } = await supabase
         .from("guests")
@@ -68,6 +85,7 @@ export default function JoinPage() {
 
   const revealPending = event.reveal_at && !isRevealed(event.reveal_at);
   const closed = getShootingState(event) === "closed";
+  const isDuplicate = duplicateName !== null && duplicateName === value.trim();
 
   return (
     <main className="safe-top safe-bottom mx-auto flex min-h-dvh w-full max-w-md flex-1 flex-col items-center px-5">
@@ -122,9 +140,17 @@ export default function JoinPage() {
           </div>
         </div>
         {error && <p className="px-4 text-sm text-danger">{error}</p>}
+        {isDuplicate && (
+          <div role="status" className="rounded-xl bg-accent/12 px-4 py-3 text-[13px] leading-relaxed text-accent">
+            「{value.trim()}」さんは、すでに参加しています。
+            <span className="text-label-2">
+              「新郎友人 たろう」のように、区別できる名前にしませんか？そのままでよければ、もう一度ボタンを押してください。
+            </span>
+          </div>
+        )}
         <button type="submit" disabled={submitting} className="btn-primary w-full">
           {submitting && <Loader2 className="size-5 animate-spin" />}
-          {closed ? "ギャラリーを見る" : existing ? "カメラに戻る" : "カメラを受け取る"}
+          {isDuplicate ? "この名前で参加する" : closed ? "ギャラリーを見る" : existing ? "カメラに戻る" : "カメラを受け取る"}
         </button>
         <p className="text-center text-xs text-label-3">登録はいりません。このブラウザに保存されます。</p>
       </form>

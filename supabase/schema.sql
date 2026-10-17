@@ -360,3 +360,19 @@ language sql stable security definer set search_path = '' as $$
   from public.events e where e.id = p_event_id;
 $$;
 grant execute on function public.get_event_public(uuid) to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- 9. 参加時の名前の重複チェック（migrations/004_nickname_check.sql と同じ内容）
+-- ---------------------------------------------------------------------
+create or replace function public.is_nickname_taken(p_event_id uuid, p_nickname text)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.guests g
+    where g.event_id = p_event_id
+      and g.auth_uid is distinct from (select auth.uid())
+      and lower(regexp_replace(g.nickname, '[[:space:]　]+', '', 'g'))
+        = lower(regexp_replace(p_nickname, '[[:space:]　]+', '', 'g'))
+  );
+$$;
+
+grant execute on function public.is_nickname_taken(uuid, text) to anon, authenticated;
