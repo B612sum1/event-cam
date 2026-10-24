@@ -112,6 +112,20 @@ export type Database = {
           },
         ];
       };
+      favorites: {
+        Row: { photo_id: string; guest_id: string; event_id: string; created_at: string };
+        Insert: { photo_id: string; guest_id: string; event_id: string; created_at?: string };
+        Update: { photo_id?: string; guest_id?: string; event_id?: string; created_at?: string };
+        Relationships: [
+          {
+            foreignKeyName: "favorites_photo_id_fkey";
+            columns: ["photo_id"];
+            isOneToOne: false;
+            referencedRelation: "photos";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -154,6 +168,8 @@ export type PublicEvent = Database["public"]["Functions"]["get_event_public"]["R
 export type EventStats = Database["public"]["Functions"]["get_event_stats"]["Returns"][number];
 
 /** ギャラリー表示用：署名付きURLとニックネームを付与した写真 */
+export type FavoriteRow = PublicTables["favorites"]["Row"];
+
 export type GalleryPhoto = PhotoRow & {
   /** 元の写真（拡大・保存用） */
   url: string;

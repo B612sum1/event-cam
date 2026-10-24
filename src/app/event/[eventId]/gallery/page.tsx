@@ -63,7 +63,7 @@ export default function GalleryPage() {
 
       <div className="mx-auto w-full max-w-5xl flex-1">
         {revealed || !event.reveal_at ? (
-          <PhotoGallery eventId={event.id} eventTitle={event.title} />
+          <PhotoGallery eventId={event.id} eventTitle={event.title} guestId={guestId} />
         ) : (
           <DevelopingView eventId={event.id} guestId={guestId} revealAt={event.reveal_at} onComplete={handleRevealComplete} />
         )}

@@ -376,3 +376,40 @@ returns boolean language sql stable security definer set search_path = '' as $$
 $$;
 
 grant execute on function public.is_nickname_taken(uuid, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- 10. お気に入り（migrations/005_favorites.sql と同じ内容）
+-- ---------------------------------------------------------------------
+create table if not exists public.favorites (
+  photo_id   uuid not null references public.photos(id) on delete cascade,
+  guest_id   uuid not null references public.guests(id) on delete cascade,
+  event_id   uuid not null references public.events(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (photo_id, guest_id)
+);
+
+create index if not exists favorites_event_idx on public.favorites (event_id);
+create index if not exists favorites_guest_idx on public.favorites (guest_id);
+
+alter table public.favorites enable row level security;
+
+-- 見える：その写真が見える人（photos の RLS がそのまま効く）
+drop policy if exists favorites_select on public.favorites;
+create policy favorites_select on public.favorites for select to authenticated
+  using (exists (select 1 from public.photos p where p.id = photo_id));
+
+-- 付ける：自分のゲストとして、見えている写真にだけ
+drop policy if exists favorites_insert on public.favorites;
+create policy favorites_insert on public.favorites for insert to authenticated
+  with check (
+    public.owns_guest(guest_id)
+    and exists (
+      select 1 from public.photos p
+      where p.id = photo_id and p.event_id = favorites.event_id
+    )
+  );
+
+-- 外す：自分のハートだけ
+drop policy if exists favorites_delete on public.favorites;
+create policy favorites_delete on public.favorites for delete to authenticated
+  using (public.owns_guest(guest_id));
