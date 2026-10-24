@@ -134,7 +134,7 @@ export default function JoinPage() {
               maxLength={30}
               autoComplete="nickname"
               enterKeyHint="go"
-              placeholder="新郎友人 たろう"
+              placeholder="山田太郎"
               className="min-w-0 flex-1 bg-transparent text-right text-base outline-none"
             />
           </div>
@@ -144,7 +144,7 @@ export default function JoinPage() {
           <div role="status" className="rounded-xl bg-accent/12 px-4 py-3 text-[13px] leading-relaxed text-accent">
             「{value.trim()}」さんは、すでに参加しています。
             <span className="text-label-2">
-              「新郎友人 たろう」のように、区別できる名前にしませんか？そのままでよければ、もう一度ボタンを押してください。
+              「山田太郎」のようにフルネームにするなど、区別できる名前にしませんか？そのままでよければ、もう一度ボタンを押してください。
             </span>
           </div>
         )}
