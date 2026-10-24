@@ -84,7 +84,7 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
         const [{ data, error }, favRes] = await Promise.all([
           supabase
             .from("photos")
-            .select("*, guests(nickname)")
+            .select("*, guests!photos_guest_id_fkey(nickname)")
             .eq("event_id", eventId)
             .order("created_at", { ascending: false })
             .limit(PAGE_LIMIT),

@@ -89,7 +89,7 @@ export default function AdminEventPage() {
     const supabase = getSupabaseBrowserClient();
     const { data, error } = await supabase
       .from("guests")
-      .select("id, nickname, created_at, photos(count)")
+      .select("id, nickname, created_at, photos!photos_guest_id_fkey(count)")
       .eq("event_id", eventId)
       .order("created_at", { ascending: true });
     if (error || !data) return;
