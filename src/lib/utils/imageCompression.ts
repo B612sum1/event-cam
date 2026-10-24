@@ -8,11 +8,14 @@ export type CompressedImage = {
   extension: "webp" | "jpg";
 };
 
-/** 仕様: WebP / 長辺1920px以下 / 500KB以下 / quality 0.8 */
+/**
+ * 高画質: WebP / 長辺3264px以下（約800万画素） / 1.9MB以下 / quality 0.88
+ * （保存先の1ファイル上限 2MB に収まるようにしている）
+ */
 export const COMPRESSION_OPTIONS = {
-  maxSizeMB: 0.5,
-  maxWidthOrHeight: 1920,
-  initialQuality: 0.8,
+  maxSizeMB: 1.9,
+  maxWidthOrHeight: 3264,
+  initialQuality: 0.88,
   // 既定の Web Worker は CDN からライブラリを読み込むため、
   // 会場の不安定な回線でも確実に動くようメインスレッドで処理する。
   useWebWorker: false,

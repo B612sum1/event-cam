@@ -8,8 +8,39 @@ import { compressImage, createThumbnail, type CompressedImage } from "@/lib/util
 
 /** ファインダーの縦横比（インスタントフィルム風の縦長 3:4） */
 const FRAME_ASPECT = 3 / 4;
-/** canvas に描く時点での長辺上限（圧縮前に縮めておくと圧縮が速い） */
-const MAX_CAPTURE_EDGE = 1920;
+/** 保存する写真の長辺(px)。2448 × 3264（約800万画素）。元の映像・写真より大きくは引き伸ばさない */
+const MAX_CAPTURE_EDGE = 3264;
+
+/** Chrome（主に Android）の静止画撮影 API。標準カメラに近い解像度・ノイズ処理で撮れる */
+type ImageCaptureLike = { takePhoto: (settings?: { fillLightMode?: string }) => Promise<Blob> };
+type ImageCaptureCtor = new (track: MediaStreamTrack) => ImageCaptureLike;
+
+/**
+ * 静止画撮影 API が使える端末では、動画の1コマではなく本物の写真を撮る。
+ * 使えない端末（iPhone など）や失敗・時間切れのときは null を返し、動画の1コマで撮る。
+ */
+async function takeStillPhoto(track: MediaStreamTrack | null, expectPortrait: boolean): Promise<ImageBitmap | null> {
+  const Ctor = (window as unknown as { ImageCapture?: ImageCaptureCtor }).ImageCapture;
+  if (!track || !Ctor || track.readyState !== "live") return null;
+  try {
+    const capture = new Ctor(track);
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 3000));
+    // 本物のフラッシュは光らせない（未対応の端末では設定なしで撮り直す）
+    const blob = await Promise.race([
+      capture.takePhoto({ fillLightMode: "off" }).catch(() => capture.takePhoto()),
+      timeout,
+    ]);
+    const bitmap = await createImageBitmap(blob);
+    // 端末によっては縦持ちでも横向きの写真が返るので、その場合は使わない
+    if (expectPortrait !== bitmap.height > bitmap.width) {
+      bitmap.close();
+      return null;
+    }
+    return bitmap;
+  } catch {
+    return null;
+  }
+}
 
 type Facing = "environment" | "user";
 
@@ -38,6 +69,7 @@ type Props = {
 export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const trackRef = useRef<MediaStreamTrack | null>(null);
 
   const [facing, setFacing] = useState<Facing>("environment");
   const [retryKey, setRetryKey] = useState(0);
@@ -72,8 +104,9 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
           audio: false,
           video: {
             facingMode: { ideal: facing },
-            width: { ideal: 2560 },
-            height: { ideal: 1920 },
+            // 端末が出せる一番高い解像度に近いものを選んでもらう
+            width: { ideal: 4096 },
+            height: { ideal: 3072 },
           },
         });
         if (cancelled) {
@@ -82,6 +115,7 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
         }
         if (!video) return;
         video.srcObject = stream;
+        trackRef.current = stream.getVideoTracks()[0] ?? null;
         await video.play().catch(() => {
           /* iOS で稀に失敗するが autoplay + muted + playsInline で再生される */
         });
@@ -109,6 +143,7 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
 
     return () => {
       cancelled = true;
+      trackRef.current = null;
       stream?.getTracks().forEach((t) => t.stop());
       if (video) video.srcObject = null;
     };
@@ -151,9 +186,12 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
     navigator.vibrate?.(30);
 
     try {
+      // 写真の元：静止画撮影できればそれを、できなければ動画の1コマを使う
+      const still = await takeStillPhoto(trackRef.current, video.videoHeight > video.videoWidth);
+      const source: CanvasImageSource = still ?? video;
       // プレビュー（object-cover）と同じ範囲を中央から切り出す
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
+      const vw = still ? still.width : video.videoWidth;
+      const vh = still ? still.height : video.videoHeight;
       let sw = vw;
       let sh = vh;
       if (vw / vh > FRAME_ASPECT) sw = vh * FRAME_ASPECT;
@@ -168,12 +206,14 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("canvas が使えません");
       // プレビューはインカメラ時に鏡像表示しているが、保存する写真は正像にする（iOS 標準カメラと同じ）
-      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      still?.close();
       // フィルムカメラ風の色・粒子・周辺減光・光漏れ・日付を焼き込む
       applyFilmEffect(ctx, canvas.width, canvas.height, { date: new Date() });
 
       const raw = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, "image/jpeg", 0.92),
+        canvas.toBlob(resolve, "image/jpeg", 0.96),
       );
       if (!raw) throw new Error("画像の取得に失敗しました");
 
