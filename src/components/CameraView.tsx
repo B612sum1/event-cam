@@ -182,10 +182,15 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
       /* 覚えられなくても切り替えはできる */
     }
   };
-  // 日付は撮影した瞬間の日時で自動的に入る（ゲストは変更できない）。表示用に1分ごとに更新
+  // 日付と時刻は撮影した瞬間の日時で自動的に入る（ゲストは変更できない）。
+  // 表示の「分」がずれないよう、数秒ごとに更新する
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 60_000);
+    const id = window.setInterval(() => {
+      const d = new Date();
+      // 分が変わったときだけ描き直す
+      setNow((prev) => (prev.getMinutes() === d.getMinutes() && prev.getHours() === d.getHours() ? prev : d));
+    }, 5_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -518,7 +523,7 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
         <div className="flex justify-start">
           {/* 日付は撮影日時で自動的に決まり、変更できない */}
           <span className="flex h-11 items-center rounded-full bg-white/[0.12] px-3.5">
-            <SegmentDate date={now} height={14} />
+            <SegmentDate date={now} height={14} withTime={false} />
           </span>
         </div>
 

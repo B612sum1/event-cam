@@ -140,10 +140,16 @@ function drawLightLeak(ctx: CanvasRenderingContext2D, w: number, h: number, rand
 
 // ---- 日付（使い捨てカメラの7セグメントLCD風） -------------------------------
 
-/** 写真に入る日付：令和表記の「R8 10 9」。撮影した日時から自動で決まり、変更できない */
-export function formatFilmDate(date: Date) {
+/**
+ * 写真に入る日付と時刻：令和表記の「R8 10 9 19:05」。撮影した日時から自動で決まり、変更できない
+ * withTime を false にすると日付だけ（「R8 10 9」）
+ */
+export function formatFilmDate(date: Date, withTime = true) {
   const reiwa = date.getFullYear() - 2018; // 2019年 = 令和1年
-  return `R${reiwa} ${date.getMonth() + 1} ${date.getDate()}`;
+  const day = `R${reiwa} ${date.getMonth() + 1} ${date.getDate()}`;
+  if (!withTime) return day;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${day} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 /*
@@ -174,6 +180,7 @@ const SLANT = 0.12; // 右に少し傾ける
 const GAP = 0.13; // 線同士のすき間
 const ADVANCE = 1.62; // 1文字の送り幅
 const SPACE = 0.95; // 空白の送り幅
+const COLON = 0.75; // 「:」の送り幅
 
 /**
  * 文字列を線分の集まりに変換する（単位：文字の高さの半分）。
@@ -185,6 +192,15 @@ export function segmentLines(text: string) {
   for (const ch of text) {
     if (ch === " ") {
       x += SPACE;
+      continue;
+    }
+    if (ch === ":") {
+      // 上下2つの点（ごく短い線を丸い端で描くと点になる）
+      for (const py of [0.6, 1.36]) {
+        const px = x + 0.1 + (2 - py) * SLANT;
+        lines.push([px + 0.01, py, px - 0.01, py + 0.08]);
+      }
+      x += COLON;
       continue;
     }
     for (const key of GLYPHS[ch] ?? "") {
