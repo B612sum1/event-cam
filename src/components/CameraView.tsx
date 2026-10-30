@@ -49,6 +49,52 @@ const TIMER_STEPS = [0, 3, 10] as const;
 type TimerSec = (typeof TIMER_STEPS)[number];
 const TIMER_KEY = "event-cam:self-timer";
 
+/** 短いノイズ（シャッターやギアの「カチッ」の素） */
+function click(ctx: AudioContext, at: number, { freq, q = 1, gain, length }: { freq: number; q?: number; gain: number; length: number }) {
+  const frames = Math.ceil(ctx.sampleRate * length);
+  const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < frames; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / frames) ** 3;
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = freq;
+  filter.Q.value = q;
+  const g = ctx.createGain();
+  g.gain.value = gain;
+  src.connect(filter).connect(g).connect(ctx.destination);
+  src.start(at);
+}
+
+/** 使い捨てカメラのシャッター音「カシャッ」（羽根が開く音と閉じる音） */
+function shutterSound(ctx: AudioContext | null) {
+  if (!ctx) return;
+  try {
+    const t = ctx.currentTime + 0.005;
+    click(ctx, t, { freq: 2600, q: 0.8, gain: 1.1, length: 0.035 });
+    click(ctx, t + 0.012, { freq: 900, q: 1.2, gain: 0.7, length: 0.05 });
+    click(ctx, t + 0.075, { freq: 3400, q: 0.9, gain: 0.8, length: 0.04 });
+    click(ctx, t + 0.085, { freq: 1200, q: 1.5, gain: 0.45, length: 0.06 });
+  } catch {
+    /* 音は鳴らなくても撮影は続ける */
+  }
+}
+
+/** フィルムの巻き上げ音「ジジジッ」（ギアの細かいクリック） */
+function windSound(ctx: AudioContext | null) {
+  if (!ctx) return;
+  try {
+    const t = ctx.currentTime + 0.01;
+    for (let i = 0; i < 9; i++) {
+      click(ctx, t + i * 0.042 + Math.random() * 0.006, { freq: 1800 + Math.random() * 500, q: 3, gain: 0.32, length: 0.018 });
+    }
+    click(ctx, t + 9 * 0.042 + 0.03, { freq: 1400, q: 2, gain: 0.5, length: 0.03 });
+  } catch {
+    /* 同上 */
+  }
+}
+
 /** カウントダウンの「ピッ」。音が出せない端末では何もしない */
 function beep(ctx: AudioContext | null, high = false) {
   if (!ctx) return;
@@ -117,6 +163,16 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
   });
   const [countdown, setCountdown] = useState<number | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
+  /** 音はユーザー操作の中でないと鳴らせない端末があるので、シャッターを押したときに準備する */
+  const ensureAudio = useCallback(() => {
+    try {
+      const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!audioRef.current && Ctx) audioRef.current = new Ctx();
+      void audioRef.current?.resume();
+    } catch {
+      /* 音なしで続ける */
+    }
+  }, []);
   const cycleTimer = () => {
     const next = TIMER_STEPS[(TIMER_STEPS.indexOf(timer) + 1) % TIMER_STEPS.length];
     setTimer(next);
@@ -228,6 +284,7 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
 
     setProcessing(true);
     setFlashKey((k) => k + 1);
+    shutterSound(audioRef.current);
     navigator.vibrate?.(30);
 
     try {
@@ -271,6 +328,7 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
       if (ok) {
         setEjected({ key: Date.now(), url: URL.createObjectURL(compressed.file) });
         setWindKey((k) => k + 1); // 巻き上げダイヤルを回す
+        windSound(audioRef.current);
       }
     } finally {
       setProcessing(false);
@@ -292,20 +350,13 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
       return;
     }
     if (!canShoot) return;
+    ensureAudio();
     if (timer === 0) {
       void shoot();
       return;
     }
-    // 音はユーザー操作の中でないと鳴らせない端末があるので、ここで準備する
-    try {
-      const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!audioRef.current && Ctx) audioRef.current = new Ctx();
-      void audioRef.current?.resume();
-    } catch {
-      /* 音なしで続ける */
-    }
     setCountdown(timer);
-  }, [countdown, canShoot, timer, shoot]);
+  }, [countdown, canShoot, timer, shoot, ensureAudio]);
 
   // 1秒ごとに数を減らし、0 になったら撮る。
   // 途中で撮れなくなったら（撮影時間が終わった・カメラが止まった など）そこでやめる
