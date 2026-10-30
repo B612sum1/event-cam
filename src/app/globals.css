@@ -66,6 +66,7 @@
   --animate-eject: eject 1800ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
   --animate-wind: wind 600ms cubic-bezier(0.3, 0.6, 0.3, 1);
   --animate-fade-in: fade-in 260ms ease-out both;
+  --animate-tick: tick 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 
   @keyframes flash {
     0% { opacity: 0.95; }
@@ -80,6 +81,13 @@
   @keyframes wind {
     from { background-position-y: 0; }
     to { background-position-y: -36px; }
+  }
+  /* セルフタイマーの数字：ふわっと大きく出て、縮みながら消える */
+  @keyframes tick {
+    0% { transform: scale(1.35); opacity: 0; }
+    18% { transform: scale(1); opacity: 1; }
+    75% { opacity: 1; }
+    100% { transform: scale(0.92); opacity: 0; }
   }
   @keyframes fade-in {
     from { opacity: 0; }

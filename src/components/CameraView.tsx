@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, RefreshCcw, SwitchCamera } from "lucide-react";
+import { Loader2, RefreshCcw, SwitchCamera, Timer, TimerOff } from "lucide-react";
 import { SegmentDate } from "@/components/SegmentDate";
 import { applyFilmEffect } from "@/lib/utils/filmEffect";
 import { compressImage, createThumbnail, type CompressedImage } from "@/lib/utils/imageCompression";
@@ -44,6 +44,29 @@ async function takeStillPhoto(track: MediaStreamTrack | null, expectPortrait: bo
 
 type Facing = "environment" | "user";
 
+/** セルフタイマーの秒数（0 = オフ）。ボタンを押すたびに順に切り替わる */
+const TIMER_STEPS = [0, 3, 10] as const;
+type TimerSec = (typeof TIMER_STEPS)[number];
+const TIMER_KEY = "event-cam:self-timer";
+
+/** カウントダウンの「ピッ」。音が出せない端末では何もしない */
+function beep(ctx: AudioContext | null, high = false) {
+  if (!ctx) return;
+  try {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.value = high ? 1760 : 1320;
+    gain.gain.setValueAtTime(0.06, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.09);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.1);
+  } catch {
+    /* 音は鳴らなくても撮影は続ける */
+  }
+}
+
 
 type CameraError =
   | { kind: "insecure" }
@@ -81,6 +104,28 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
   const [flashKey, setFlashKey] = useState(0);
   const [ejected, setEjected] = useState<{ key: number; url: string } | null>(null);
   const [windKey, setWindKey] = useState(0);
+
+  // セルフタイマー：設定は端末に覚えておく（次に開いたときも同じ秒数）
+  // （カメラ画面はブラウザ側でだけ描画されるので、最初から保存値を読める）
+  const [timer, setTimer] = useState<TimerSec>(() => {
+    try {
+      const saved = Number(localStorage.getItem(TIMER_KEY));
+      return (TIMER_STEPS as readonly number[]).includes(saved) ? (saved as TimerSec) : 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const audioRef = useRef<AudioContext | null>(null);
+  const cycleTimer = () => {
+    const next = TIMER_STEPS[(TIMER_STEPS.indexOf(timer) + 1) % TIMER_STEPS.length];
+    setTimer(next);
+    try {
+      localStorage.setItem(TIMER_KEY, String(next));
+    } catch {
+      /* 覚えられなくても切り替えはできる */
+    }
+  };
   // 日付は撮影した瞬間の日時で自動的に入る（ゲストは変更できない）。表示用に1分ごとに更新
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -232,17 +277,75 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
     }
   }, [canShoot, onCapture]);
 
+  // ---- セルフタイマー -----------------------------------------------------
+  const shootRef = useRef(shoot);
+  const canShootRef = useRef(canShoot);
+  useEffect(() => {
+    shootRef.current = shoot;
+    canShootRef.current = canShoot;
+  }, [shoot, canShoot]);
+
+  /** シャッターボタン：タイマーがオンなら数え始め、数えている最中に押すと止める */
+  const pressShutter = useCallback(() => {
+    if (countdown !== null && canShoot) {
+      setCountdown(null);
+      return;
+    }
+    if (!canShoot) return;
+    if (timer === 0) {
+      void shoot();
+      return;
+    }
+    // 音はユーザー操作の中でないと鳴らせない端末があるので、ここで準備する
+    try {
+      const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!audioRef.current && Ctx) audioRef.current = new Ctx();
+      void audioRef.current?.resume();
+    } catch {
+      /* 音なしで続ける */
+    }
+    setCountdown(timer);
+  }, [countdown, canShoot, timer, shoot]);
+
+  // 1秒ごとに数を減らし、0 になったら撮る。
+  // 途中で撮れなくなったら（撮影時間が終わった・カメラが止まった など）そこでやめる
+  useEffect(() => {
+    if (countdown === null) return;
+    beep(audioRef.current, countdown <= 2);
+    navigator.vibrate?.(countdown <= 2 ? 20 : 8);
+    const t = window.setTimeout(() => {
+      if (!canShootRef.current) {
+        setCountdown(null);
+      } else if (countdown <= 1) {
+        setCountdown(null);
+        void shootRef.current();
+      } else {
+        setCountdown(countdown - 1);
+      }
+    }, 1000);
+    return () => window.clearTimeout(t);
+  }, [countdown]);
+
+  useEffect(
+    () => () => {
+      void audioRef.current?.close().catch(() => {});
+    },
+    [],
+  );
+
   // PC ではスペースキーでも撮影できる
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code === "Space" && !(e.target instanceof HTMLInputElement)) {
         e.preventDefault();
-        void shoot();
+        pressShutter();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [shoot]);
+  }, [pressShutter]);
+
+  const counting = countdown !== null && canShoot;
 
   // ---- 描画 --------------------------------------------------------------
   return (
@@ -274,11 +377,44 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
             </>
           )}
 
+          {ready && !error && (
+            <button
+              type="button"
+              onClick={cycleTimer}
+              disabled={processing || counting}
+              aria-label={timer ? `セルフタイマー ${timer}秒（押すと切り替え）` : "セルフタイマー オフ（押すと切り替え）"}
+              className={`absolute top-3 left-3 flex h-11 min-w-11 items-center justify-center gap-1 rounded-full px-3 backdrop-blur-sm transition active:scale-95 disabled:opacity-40 ${
+                timer ? "bg-accent text-black" : "bg-black/40 text-white"
+              }`}
+            >
+              {timer ? <Timer className="size-5" /> : <TimerOff className="size-5" />}
+              {timer > 0 && <span className="cond text-[17px] leading-none">{timer}s</span>}
+            </button>
+          )}
+
+          {/* セルフタイマーのカウントダウン：赤いランプの点滅 + 大きな数字 */}
+          {counting && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center" role="status" aria-live="assertive">
+              <span
+                className={`absolute top-[18px] left-1/2 size-3 -translate-x-1/2 rounded-full bg-[#ff453a] shadow-[0_0_14px_4px_rgb(255_69_58/0.7)] ${
+                  countdown <= 2 ? "animate-[pulse_0.35s_ease-in-out_infinite]" : "animate-pulse"
+                }`}
+              />
+              <span
+                key={countdown}
+                className="cond animate-tick text-[min(42vw,180px)] leading-none text-white [text-shadow:0_4px_30px_rgb(0_0_0/0.5)]"
+              >
+                {countdown}
+              </span>
+              <span className="sr-only">{countdown}秒後に撮影します</span>
+            </div>
+          )}
+
           {hasMultipleCameras && ready && (
             <button
               type="button"
               onClick={switchCamera}
-              disabled={processing}
+              disabled={processing || counting}
               aria-label="インカメラ・外カメラを切り替え"
               className="absolute top-3 right-3 grid size-11 place-items-center rounded-full bg-black/40 text-white backdrop-blur-sm transition active:scale-95 disabled:opacity-40"
             >
@@ -337,12 +473,20 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
 
         <button
           type="button"
-          onClick={() => void shoot()}
-          disabled={!canShoot}
-          aria-label={`シャッターを切る（残り${Math.max(remaining, 0)}枚）`}
-          className="grid size-[82px] touch-manipulation place-items-center rounded-full border-4 border-white p-1 transition active:scale-[0.95] disabled:opacity-35"
+          onClick={pressShutter}
+          disabled={!canShoot && !counting}
+          aria-label={
+            counting
+              ? "セルフタイマーを止める"
+              : `シャッターを切る（${timer ? `${timer}秒後、` : ""}残り${Math.max(remaining, 0)}枚）`
+          }
+          className={`grid size-[82px] touch-manipulation place-items-center rounded-full border-4 p-1 transition active:scale-[0.95] disabled:opacity-35 ${
+            counting ? "border-[#ff453a]" : "border-white"
+          }`}
         >
-          <span className="grid size-full place-items-center rounded-full bg-white">
+          <span
+            className={`grid size-full place-items-center transition-all ${counting ? "scale-[0.5] rounded-[12px] bg-[#ff453a]" : "rounded-full bg-white"}`}
+          >
             {processing && <Loader2 className="size-6 animate-spin text-black" />}
           </span>
         </button>
