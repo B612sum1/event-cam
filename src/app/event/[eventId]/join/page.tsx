@@ -125,7 +125,7 @@ export default function JoinPage() {
         <div className="group-list">
           <div className="group-row h-[50px]">
             <label htmlFor="nickname" className="shrink-0">
-              Name
+              名前
             </label>
             <input
               id="nickname"
