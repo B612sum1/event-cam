@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { abortPhotoUploads, getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { addPending, listPending, removePending, sendShot, type PendingShot } from "@/lib/utils/uploadQueue";
 
 type Callbacks = {
@@ -14,7 +14,7 @@ type Callbacks = {
 };
 
 /** 電波が戻るのを待つ間、この間隔でも送り直してみる */
-const RETRY_EVERY = 20_000;
+const RETRY_EVERY = 10_000;
 
 /**
  * 未送信の写真を管理する。撮った写真は enqueue で箱に入れ、すぐ送る。
@@ -61,7 +61,7 @@ export function usePendingUploads(guestId: string | null, callbacks: Callbacks =
             setWaiting(true);
             cbRef.current.onWaiting?.(shot);
             // 電波が無いうちは、後ろの写真も送れないので一旦やめる
-            again.current = false;
+            // （この間に「電波が戻った」合図が来ていたら、すぐもう一周する）
             break;
           }
           await removePending(shot.id);
@@ -103,20 +103,39 @@ export function usePendingUploads(guestId: string | null, callbacks: Callbacks =
     };
   }, [guestId, flush]);
 
+  /**
+   * 今すぐ送り直す。電波が無いときに始まって止まったままの通信があれば、打ち切ってからやり直す
+   * （ボタン・電波が戻ったとき・画面に戻ってきたとき）
+   */
+  const retryNow = useCallback(() => {
+    if (busy.current) {
+      again.current = true;
+      abortPhotoUploads();
+    } else {
+      void flush();
+    }
+  }, [flush]);
+
   // 電波が戻ったとき・画面に戻ってきたとき・一定時間ごとに送り直す
   useEffect(() => {
     if (!guestId || pending === 0) return;
-    const kick = () => void flush();
-    const onVisible = () => document.visibilityState === "visible" && kick();
-    window.addEventListener("online", kick);
+    let wasOnline = navigator.onLine;
+    const onVisible = () => document.visibilityState === "visible" && retryNow();
+    window.addEventListener("online", retryNow);
     document.addEventListener("visibilitychange", onVisible);
-    const id = window.setInterval(kick, RETRY_EVERY);
+    const id = window.setInterval(() => {
+      // 「online」の合図が届かない端末もあるので、ここでも電波の戻りを確かめる
+      const online = navigator.onLine;
+      if (online && !wasOnline) retryNow();
+      else void flush();
+      wasOnline = online;
+    }, RETRY_EVERY);
     return () => {
-      window.removeEventListener("online", kick);
+      window.removeEventListener("online", retryNow);
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(id);
     };
-  }, [guestId, pending, flush]);
+  }, [guestId, pending, flush, retryNow]);
 
-  return { pending, sending, waiting, enqueue, flush };
+  return { pending, sending, waiting, enqueue, flush: retryNow };
 }

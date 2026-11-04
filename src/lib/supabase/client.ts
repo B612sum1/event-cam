@@ -8,6 +8,39 @@ export type TypedSupabaseClient = SupabaseClient<Database>;
 
 let browserClient: TypedSupabaseClient | undefined;
 
+// ---- 写真の送信を、途中で打ち切れるようにする -----------------------------------
+// 電波が無いところで始まった通信は、失敗せずに止まったままになることがある。
+// 電波が戻ったときにそれを打ち切って、すぐ送り直すために使う。
+const uploadControllers = new Set<AbortController>();
+
+/** 写真の送信（保存先へのアップロードと、写真の記録）に当たる通信か */
+function isPhotoUpload(url: string, method: string) {
+  if (method === "POST" && url.includes("/storage/v1/object/event-photos/")) return true;
+  if (url.includes("/rest/v1/photos") && (method === "POST" || url.includes("storage_path="))) return true;
+  return false;
+}
+
+const abortableFetch: typeof fetch = (input, init) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+  if (!isPhotoUpload(url, method)) return fetch(input, init);
+
+  const controller = new AbortController();
+  const outer = init?.signal;
+  if (outer) {
+    if (outer.aborted) controller.abort();
+    else outer.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+  uploadControllers.add(controller);
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => uploadControllers.delete(controller));
+};
+
+/** 送信中の写真の通信をすべて打ち切る（打ち切られた写真は、あとで送り直される） */
+export function abortPhotoUploads() {
+  uploadControllers.forEach((c) => c.abort());
+  uploadControllers.clear();
+}
+
 /**
  * ブラウザ用 Supabase クライアント（シングルトン）。
  * セッションは @supabase/ssr によって Cookie に保存されるため、
@@ -28,7 +61,7 @@ export function getSupabaseBrowserClient(): TypedSupabaseClient {
     );
   }
 
-  browserClient = createBrowserClient<Database>(url, key);
+  browserClient = createBrowserClient<Database>(url, key, { global: { fetch: abortableFetch } });
   return browserClient;
 }
 

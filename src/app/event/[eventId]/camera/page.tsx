@@ -205,17 +205,13 @@ export default function CameraPage() {
                 <CloudOff className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
               )}
               <div className="min-w-0">
-                <p className="text-[13px] font-semibold">
-                  {uploads.sending ? c.sendingNow : c.pending(uploads.pending)}
-                </p>
+                <p className="text-[13px] font-semibold">{c.pending(uploads.pending)}</p>
                 <p className="text-[11px] leading-snug text-label-2">{c.pendingHint}</p>
               </div>
             </div>
-            {!uploads.sending && (
-              <button type="button" onClick={() => void uploads.flush()} className="btn-glass shrink-0">
-                {c.sendNow}
-              </button>
-            )}
+            <button type="button" onClick={uploads.flush} className="btn-glass shrink-0">
+              {c.sendNow}
+            </button>
           </div>
         )}
       </div>

@@ -139,7 +139,7 @@ export async function sendShot(supabase: SupabaseClient<Database>, shot: Pending
     // 1. 元の写真
     const { error: upErr } = await withTimeout(
       bucket.upload(path, shot.image, { contentType: shot.imageMime, cacheControl: "31536000", upsert: false }),
-      90_000,
+      60_000,
     );
     if (upErr && !isDuplicate(upErr as { message?: string; statusCode?: string })) return fail(upErr);
     uploaded.push(path);
@@ -150,7 +150,7 @@ export async function sendShot(supabase: SupabaseClient<Database>, shot: Pending
       const candidate = `${base}_thumb.${shot.thumbExt}`;
       const { error: thErr } = await withTimeout(
         bucket.upload(candidate, shot.thumb, { contentType: shot.thumbMime ?? undefined, cacheControl: "31536000", upsert: false }),
-        30_000,
+        20_000,
       );
       if (!thErr || isDuplicate(thErr as { message?: string; statusCode?: string })) {
         thumbPath = candidate;
@@ -163,7 +163,7 @@ export async function sendShot(supabase: SupabaseClient<Database>, shot: Pending
     // 3. 前回の送信で記録まで済んでいたら（返事だけ届かなかった場合）、二重に作らない
     const { data: existing, error: findErr } = await withTimeout(
       Promise.resolve(supabase.from("photos").select("id").eq("storage_path", path).maybeSingle()),
-      20_000,
+      15_000,
     );
     if (findErr) return fail(findErr);
     if (existing) return { kind: "sent" };
@@ -183,6 +183,8 @@ export async function sendShot(supabase: SupabaseClient<Database>, shot: Pending
       ));
       if (!insErr) await bucket.remove([thumbPath]).catch(() => {});
     }
+    // 打ち切った通信が実は届いていて、記録がもうある場合（同じファイル名は1つしか記録できない）
+    if (insErr && (insErr.code === "23505" || /duplicate key/i.test(insErr.message))) return { kind: "sent" };
     if (insErr) return fail(insErr);
     return { kind: "sent" };
   } catch (e) {
