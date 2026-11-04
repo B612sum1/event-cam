@@ -5,14 +5,14 @@ type Props = {
   /** 数字1文字の高さ(px) */
   height?: number;
   className?: string;
-  /** 時刻も出す（写真に入るのと同じ「R8 10 9 19:05」）。false で日付だけ */
+  /** 時刻も出す（「R8 10 9 19:05」）。写真に時刻を入れる場合は true にそろえる */
   withTime?: boolean;
 };
 
 /**
  * 使い捨てカメラの日付LCD（7セグメント）。写真に焼き込む日付と同じ形を SVG で描く。
  */
-export function SegmentDate({ date, height = 22, className = "", withTime = true }: Props) {
+export function SegmentDate({ date, height = 22, className = "", withTime = false }: Props) {
   const text = formatFilmDate(date, withTime);
   const { lines, width } = segmentLines(text);
   const pad = 0.5;

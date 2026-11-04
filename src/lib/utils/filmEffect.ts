@@ -141,10 +141,10 @@ function drawLightLeak(ctx: CanvasRenderingContext2D, w: number, h: number, rand
 // ---- 日付（使い捨てカメラの7セグメントLCD風） -------------------------------
 
 /**
- * 写真に入る日付と時刻：令和表記の「R8 10 9 19:05」。撮影した日時から自動で決まり、変更できない
- * withTime を false にすると日付だけ（「R8 10 9」）
+ * 写真に入る日付：令和表記の「R8 10 9」。撮影した日時から自動で決まり、変更できない
+ * withTime を true にすると時刻も入る（「R8 10 9 19:05」）
  */
-export function formatFilmDate(date: Date, withTime = true) {
+export function formatFilmDate(date: Date, withTime = false) {
   const reiwa = date.getFullYear() - 2018; // 2019年 = 令和1年
   const day = `R${reiwa} ${date.getMonth() + 1} ${date.getDate()}`;
   if (!withTime) return day;
