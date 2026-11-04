@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCcw, SwitchCamera, Timer, TimerOff } from "lucide-react";
 import { SegmentDate } from "@/components/SegmentDate";
+import { useI18n } from "@/lib/i18n";
+import { IMAGE_FAILED } from "@/lib/utils/format";
 import { applyFilmEffect } from "@/lib/utils/filmEffect";
 import { compressImage, createThumbnail, type CompressedImage } from "@/lib/utils/imageCompression";
 
@@ -136,6 +138,8 @@ type Props = {
 };
 
 export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture }: Props) {
+  const { t } = useI18n();
+  const c = t.camera;
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const trackRef = useRef<MediaStreamTrack | null>(null);
@@ -311,7 +315,7 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
       canvas.height = Math.round(sh * scale);
 
       const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("canvas が使えません");
+      if (!ctx) throw new Error(IMAGE_FAILED);
       // プレビューはインカメラ時に鏡像表示しているが、保存する写真は正像にする（iOS 標準カメラと同じ）
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
@@ -322,7 +326,7 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
       const raw = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", 0.96),
       );
-      if (!raw) throw new Error("画像の取得に失敗しました");
+      if (!raw) throw new Error(IMAGE_FAILED);
 
       // 元の写真（拡大・保存用）と、一覧用の小さい写真を作る
       const [compressed, thumb] = await Promise.all([
@@ -438,7 +442,7 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
               type="button"
               onClick={cycleTimer}
               disabled={processing || counting}
-              aria-label={timer ? `セルフタイマー ${timer}秒（押すと切り替え）` : "セルフタイマー オフ（押すと切り替え）"}
+              aria-label={timer ? c.timerOn(timer) : c.timerOff}
               className={`absolute top-3 left-3 flex h-11 min-w-11 items-center justify-center gap-1 rounded-full px-3 backdrop-blur-sm transition active:scale-95 disabled:opacity-40 ${
                 timer ? "bg-accent text-black" : "bg-black/40 text-white"
               }`}
@@ -462,7 +466,7 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
               >
                 {countdown}
               </span>
-              <span className="sr-only">{countdown}秒後に撮影します</span>
+              <span className="sr-only">{c.countdown(countdown)}</span>
             </div>
           )}
 
@@ -471,7 +475,7 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
               type="button"
               onClick={switchCamera}
               disabled={processing || counting}
-              aria-label="インカメラ・外カメラを切り替え"
+              aria-label={c.switchCamera}
               className="absolute top-3 right-3 grid size-11 place-items-center rounded-full bg-black/40 text-white backdrop-blur-sm transition active:scale-95 disabled:opacity-40"
             >
               <SwitchCamera className="size-5" />
@@ -480,7 +484,7 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
 
           {!ready && !error && (
             <div className="absolute inset-0 flex items-center justify-center text-label-3">
-              <Loader2 className="size-7 animate-spin" aria-label="カメラを起動中" />
+              <Loader2 className="size-7 animate-spin" aria-label={c.starting} />
             </div>
           )}
 
@@ -495,8 +499,8 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
 
           {!blocked && remaining <= 0 && ready && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/72 px-8 text-center">
-              <p className="text-[22px] font-bold tracking-[-0.01em]">撮り終えました。</p>
-              <p className="text-sm text-label-2">あとは、現像を待つだけ。</p>
+              <p className="text-[22px] font-bold tracking-[-0.01em]">{c.doneTitle}</p>
+              <p className="text-sm text-label-2">{c.waitReveal}</p>
             </div>
           )}
 
@@ -533,8 +537,8 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
           disabled={!canShoot && !counting}
           aria-label={
             counting
-              ? "セルフタイマーを止める"
-              : `シャッターを切る（${timer ? `${timer}秒後、` : ""}残り${Math.max(remaining, 0)}枚）`
+              ? c.stopTimer
+              : c.shutter(Math.max(remaining, 0), timer)
           }
           className={`grid size-[82px] touch-manipulation place-items-center rounded-full border-4 p-1 transition active:scale-[0.95] disabled:opacity-35 ${
             counting ? "border-[#ff453a]" : "border-white"
@@ -549,7 +553,7 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
 
         <div className="flex justify-end">
           <div className="flex h-[50px] items-center gap-1.5 rounded-full bg-white/[0.12] pr-2 pl-1">
-            <FilmCounter remaining={Math.max(remaining, 0)} max={maxPhotos} />
+            <FilmCounter remaining={Math.max(remaining, 0)} max={maxPhotos} label={c.remaining(Math.max(remaining, 0))} />
             <span
               key={windKey}
               aria-hidden
@@ -567,7 +571,7 @@ export function CameraView({ remaining, maxPhotos, disabled, blocked, onCapture 
 }
 
 /** 使い捨てカメラの小窓のような、数字が回るフィルムカウンター */
-function FilmCounter({ remaining, max }: { remaining: number; max: number }) {
+function FilmCounter({ remaining, max, label }: { remaining: number; max: number; label: string }) {
   const ROW = 24; // px
   const SIZE = 42;
   const numbers = Array.from({ length: max + 1 }, (_, i) => max - i); // max, max-1, ... 0
@@ -577,7 +581,7 @@ function FilmCounter({ remaining, max }: { remaining: number; max: number }) {
       className="relative block overflow-hidden rounded-full bg-[linear-gradient(180deg,#9e9a90,#f2efe6_32%,#f2efe6_68%,#9e9a90)]"
       style={{ width: SIZE, height: SIZE }}
       role="img"
-      aria-label={`残り${remaining}枚`}
+      aria-label={label}
     >
       <span
         className="absolute inset-x-0 transition-transform duration-500 ease-out"
@@ -594,25 +598,14 @@ function FilmCounter({ remaining, max }: { remaining: number; max: number }) {
 }
 
 function CameraErrorPanel({ error, onRetry }: { error: CameraError; onRetry: () => void }) {
+  const c = useI18n().t.camera;
   const content = {
-    insecure: {
-      title: "HTTPS で開いてください",
-      body: "カメラは安全な接続（https://）でのみ使えます。主催者に共有されたURLを開き直してください。",
-    },
-    denied: {
-      title: "カメラへのアクセスが許可されていません",
-      body: "ブラウザの設定でこのサイトのカメラを「許可」にしてから、再試行してください。iPhone は 設定 > Safari > カメラ から変更できます。",
-    },
-    "not-found": {
-      title: "カメラが見つかりません",
-      body: "この端末で使えるカメラが見つかりませんでした。",
-    },
-    "in-use": {
-      title: "カメラが使用中です",
-      body: "他のアプリやタブでカメラを使っていないか確認して、再試行してください。",
-    },
+    insecure: { title: c.errInsecureTitle, body: c.errInsecureBody },
+    denied: { title: c.errDeniedTitle, body: c.errDeniedBody },
+    "not-found": { title: c.errNotFoundTitle, body: c.errNotFoundBody },
+    "in-use": { title: c.errInUseTitle, body: c.errInUseBody },
     unknown: {
-      title: "カメラを起動できませんでした",
+      title: c.errUnknownTitle,
       body: error.kind === "unknown" ? error.message : "",
     },
   }[error.kind];
@@ -627,7 +620,7 @@ function CameraErrorPanel({ error, onRetry }: { error: CameraError; onRetry: () 
           onClick={onRetry}
           className="btn-glass mt-2 h-11 px-5"
         >
-          <RefreshCcw className="size-4" /> 再試行
+          <RefreshCcw className="size-4" /> {c.retry}
         </button>
       )}
     </div>

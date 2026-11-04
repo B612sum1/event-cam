@@ -1,3 +1,5 @@
+import { messages, type Lang } from "@/lib/i18n/messages";
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -8,22 +10,26 @@ export function isRevealed(revealAt: string | null, now = Date.now()): boolean {
   return revealAt === null || new Date(revealAt).getTime() <= now;
 }
 
-const dateTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
-  month: "long",
-  day: "numeric",
-  weekday: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+const LOCALE: Record<Lang, string> = { ja: "ja-JP", en: "en-US" };
+const formatters = new Map<string, Intl.DateTimeFormat>();
+const fmt = (lang: Lang, key: string, options: Intl.DateTimeFormatOptions) => {
+  const id = `${lang}:${key}`;
+  let f = formatters.get(id);
+  if (!f) formatters.set(id, (f = new Intl.DateTimeFormat(LOCALE[lang], options)));
+  return f;
+};
 
-export const formatDateTime = (iso: string) => dateTimeFormatter.format(new Date(iso));
+/** 「10月24日(土) 19:35」/「Sat, Oct 24, 7:35 PM」 */
+export const formatDateTime = (iso: string, lang: Lang = "ja") =>
+  fmt(lang, "dt", { month: lang === "ja" ? "long" : "short", day: "numeric", weekday: "short", hour: lang === "ja" ? "2-digit" : "numeric", minute: "2-digit" }).format(
+    new Date(iso),
+  );
 
-const timeFormatter = new Intl.DateTimeFormat("ja-JP", {
-  hour: "2-digit",
-  minute: "2-digit",
-});
+export const formatTime = (iso: string, lang: Lang = "ja") =>
+  fmt(lang, "t", { hour: lang === "ja" ? "2-digit" : "numeric", minute: "2-digit" }).format(new Date(iso));
 
-export const formatTime = (iso: string) => timeFormatter.format(new Date(iso));
+/** 「2026.10.24」（ベタ焼きの見出し用） */
+export const formatDotDate = (date: Date) => `${date.getFullYear()}.${date.getMonth() + 1}.${date.getDate()}`;
 
 // ---- 撮影できる時間 ----------------------------------------------------------
 
@@ -39,20 +45,19 @@ export function getShootingState(
   return "open";
 }
 
-const shortDateFormatter = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", weekday: "short" });
-const shortDateTime = (iso: string) => `${shortDateFormatter.format(new Date(iso))} ${formatTime(iso)}`;
+const shortDateTime = (iso: string, lang: Lang) =>
+  `${fmt(lang, "sd", lang === "ja" ? { month: "numeric", day: "numeric", weekday: "short" } : { weekday: "short", month: "short", day: "numeric" }).format(new Date(iso))} ${formatTime(iso, lang)}`;
 const sameDay = (a: string, b: string) => new Date(a).toDateString() === new Date(b).toDateString();
 
 /** 「10/10(土) 18:00〜21:00」「21:00まで」「いつでも」など */
-export function formatShootWindow(start: string | null, end: string | null): string {
+export function formatShootWindow(start: string | null, end: string | null, lang: Lang = "ja"): string {
+  const t = messages[lang].time;
   if (start && end) {
-    return sameDay(start, end)
-      ? `${shortDateTime(start)}〜${formatTime(end)}`
-      : `${shortDateTime(start)}〜${shortDateTime(end)}`;
+    return t.range(shortDateTime(start, lang), sameDay(start, end) ? formatTime(end, lang) : shortDateTime(end, lang));
   }
-  if (start) return `${shortDateTime(start)} から`;
-  if (end) return `${shortDateTime(end)} まで`;
-  return "いつでも";
+  if (start) return t.from(shortDateTime(start, lang));
+  if (end) return t.until(shortDateTime(end, lang));
+  return t.anytime;
 }
 
 /** <input type="datetime-local"> 用の値（ローカル時刻）に変換 */
@@ -63,8 +68,13 @@ export function toDateTimeLocalValue(date: Date): string {
   )}:${pad(date.getMinutes())}`;
 }
 
-/** Supabase のエラーをユーザー向けの日本語に寄せる */
-export function toFriendlyError(error: unknown): string {
+/** アプリ内で投げるエラーの種類（画面では今の言語の文に置き換える） */
+export const FETCH_FAILED = "fetch_failed";
+export const IMAGE_FAILED = "image_failed";
+
+/** Supabase などのエラーを、利用者向けの文に寄せる */
+export function toFriendlyError(error: unknown, lang: Lang = "ja"): string {
+  const e = messages[lang].errors;
   const message =
     error instanceof Error
       ? error.message
@@ -72,12 +82,13 @@ export function toFriendlyError(error: unknown): string {
         ? String((error as { message: unknown }).message)
         : String(error);
 
-  if (message.includes("photo_limit_reached")) return "撮影できる枚数の上限に達しました。";
-  if (message.includes("shooting_not_started")) return "まだ撮影の時間になっていません。";
-  if (message.includes("shooting_closed")) return "撮影の時間は終了しました。";
-  if (message.includes("Failed to fetch") || message.includes("NetworkError"))
-    return "通信できませんでした。電波の良い場所でもう一度お試しください。";
-  if (message.includes("row-level security") || message.includes("Unauthorized"))
-    return "権限がありません。参加ページからもう一度参加してください。";
+  if (message.includes("photo_limit_reached")) return e.photoLimit;
+  if (message.includes("shooting_not_started")) return e.notStarted;
+  if (message.includes("shooting_closed")) return e.closed;
+  if (message.includes("Failed to fetch") || message.includes("NetworkError") || message.includes("Load failed"))
+    return e.network;
+  if (message.includes("row-level security") || message.includes("Unauthorized")) return e.forbidden;
+  if (message === FETCH_FAILED) return e.fetchPhoto;
+  if (message === IMAGE_FAILED) return e.makeImage;
   return message;
 }

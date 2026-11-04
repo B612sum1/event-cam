@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Share,
 } from "lucide-react";
+import { useI18n, type Messages } from "@/lib/i18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { CONTACT_SHEET_MAX, renderContactSheet } from "@/lib/utils/contactSheet";
 import { formatTime, toFriendlyError } from "@/lib/utils/format";
@@ -39,6 +40,12 @@ type Fav = Pick<FavoriteRow, "photo_id" | "guest_id">;
  * （RLS により、現像前は他人の写真はそもそも取得・配信されない）
  */
 export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
+  const { t, lang } = useI18n();
+  const g = t.gallery;
+  const guestName = useRef(t.common.guest);
+  useEffect(() => {
+    guestName.current = t.common.guest;
+  }, [t]);
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +106,7 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
           : new Map<string, string>();
         const list: GalleryPhoto[] = rows.flatMap((r) => {
           const url = urls.get(r.storage_path);
-          const nickname = r.guests?.nickname ?? "ゲスト";
+          const nickname = r.guests?.nickname ?? guestName.current;
           nicknameCache.current.set(r.guest_id, nickname);
           if (!url) return [];
           const { guests: _guests, ...photo } = r;
@@ -114,7 +121,7 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
           if (!favRes.error) setFavs(favRes.data ?? []);
         }
       } catch (e) {
-        if (!cancelled) setError(toFriendlyError(e));
+        if (!cancelled) setError(toFriendlyError(e, lang));
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -125,6 +132,7 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 言語を切り替えても読み直さない
   }, [eventId, signUrls, reloadKey]);
 
   // 端末の時計がサーバーより進んでいると、現像直後の取得で他人の写真がまだ見えないことがあるため
@@ -147,7 +155,7 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
       const cached = nicknameCache.current.get(id);
       if (cached) return cached;
       const { data } = await supabase.from("guests").select("nickname").eq("id", id).maybeSingle();
-      const name = data?.nickname ?? "ゲスト";
+      const name = data?.nickname ?? guestName.current;
       nicknameCache.current.set(id, name);
       return name;
     };
@@ -244,7 +252,7 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
       setFavs((prev) =>
         on ? [...prev, { photo_id: photo.id, guest_id: guestId }] : prev.filter((f) => !(f.photo_id === photo.id && f.guest_id === guestId)),
       );
-      setNotice({ id: Date.now(), text: toFriendlyError(error), error: true });
+      setNotice({ id: Date.now(), text: toFriendlyError(error, lang), error: true });
     }
   };
 
@@ -270,21 +278,21 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
   const savePicked = async () => {
     const list = pickedPhotos();
     if (!list.length) return;
-    setBusy({ label: "写真を準備しています", done: 0, total: list.length });
+    setBusy({ label: g.preparing, done: 0, total: list.length });
     try {
       const files: File[] = [];
       for (const p of list) {
         files.push(await fetchAsFile(p.url, `${frameOf.get(p.id)}_${p.nickname}`));
-        setBusy({ label: "写真を準備しています", done: files.length, total: list.length });
+        setBusy({ label: g.preparing, done: files.length, total: list.length });
       }
       setBusy(null);
-      const result = await saveFiles(files, `${eventTitle}_写真${files.length}枚`);
+      const result = await saveFiles(files, g.zipName(eventTitle, files.length));
       if (result !== "cancelled") {
-        setNotice({ id: Date.now(), text: result === "shared" ? `${files.length}枚を保存しました` : "ダウンロードしました" });
+        setNotice({ id: Date.now(), text: result === "shared" ? g.savedN(files.length) : g.downloaded });
         endSelecting();
       }
     } catch (e) {
-      setNotice({ id: Date.now(), text: toFriendlyError(e), error: true });
+      setNotice({ id: Date.now(), text: toFriendlyError(e, lang), error: true });
     } finally {
       setBusy(null);
     }
@@ -294,28 +302,30 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
     const list = pickedPhotos();
     if (!list.length) return;
     if (list.length > CONTACT_SHEET_MAX) {
-      setNotice({ id: Date.now(), text: `ベタ焼きは${CONTACT_SHEET_MAX}コマまでです`, error: true });
+      setNotice({ id: Date.now(), text: g.sheetMax(CONTACT_SHEET_MAX), error: true });
       return;
     }
-    setBusy({ label: "ベタ焼きを焼いています", done: 0, total: list.length });
+    setBusy({ label: g.baking, done: 0, total: list.length });
     try {
       const blob = await renderContactSheet(
         list.map((p) => ({ url: p.url, frame: frameOf.get(p.id) ?? 0, who: p.nickname })),
         {
           title: eventTitle,
           date: new Date(list[0].created_at),
-          onProgress: (done, total) => setBusy({ label: "ベタ焼きを焼いています", done, total }),
+          meta: t.sheet.meta,
+          footer: t.sheet.footer,
+          onProgress: (done, total) => setBusy({ label: g.baking, done, total }),
         },
       );
       setBusy(null);
-      const file = new File([blob], safeFileName(`${eventTitle}_ベタ焼き_${list.length}コマ.jpg`), { type: "image/jpeg" });
-      const result = await saveFiles([file], `${eventTitle}_ベタ焼き`);
+      const file = new File([blob], safeFileName(`${g.sheetFile(eventTitle, list.length)}.jpg`), { type: "image/jpeg" });
+      const result = await saveFiles([file], g.sheetZip(eventTitle));
       if (result !== "cancelled") {
-        setNotice({ id: Date.now(), text: "ベタ焼きを保存しました" });
+        setNotice({ id: Date.now(), text: g.sheetSaved });
         endSelecting();
       }
     } catch (e) {
-      setNotice({ id: Date.now(), text: toFriendlyError(e), error: true });
+      setNotice({ id: Date.now(), text: toFriendlyError(e, lang), error: true });
     } finally {
       setBusy(null);
     }
@@ -325,7 +335,7 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
   if (loading) {
     return (
       <div className="flex justify-center py-20 text-label-3">
-        <Loader2 className="size-6 animate-spin" aria-label="読み込み中" />
+        <Loader2 className="size-6 animate-spin" aria-label={t.common.loading} />
       </div>
     );
   }
@@ -335,17 +345,17 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
   }
 
   const refreshButton = (
-    <button type="button" onClick={refresh} disabled={refreshing} className="btn-glass" aria-label="最新の写真を読み込む">
+    <button type="button" onClick={refresh} disabled={refreshing} className="btn-glass" aria-label={g.refreshLabel}>
       <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
-      更新
+      {g.refresh}
     </button>
   );
 
   if (photos.length === 0) {
     return (
       <div className="flex flex-col items-center px-5 py-20 text-center">
-        <p className="text-[22px] font-bold tracking-[-0.01em]">まだ1枚もありません。</p>
-        <p className="mt-2 mb-6 text-[15px] text-label-2">撮った写真は、ここにすぐ並びます。</p>
+        <p className="text-[22px] font-bold tracking-[-0.01em]">{g.emptyTitle}</p>
+        <p className="mt-2 mb-6 text-[15px] text-label-2">{g.emptyBody}</p>
         {refreshButton}
       </div>
     );
@@ -353,23 +363,23 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
 
   const mineCount = guestId ? photos.filter((p) => p.guest_id === guestId).length : 0;
   const chips: { id: Filter; label: string; show: boolean }[] = [
-    { id: "all", label: `すべて ${photos.length}`, show: true },
-    { id: "fav", label: `お気に入り ${myFavs.size}`, show: favReady && !!guestId },
-    { id: "mine", label: `自分の写真 ${mineCount}`, show: !!guestId },
+    { id: "all", label: g.all(photos.length), show: true },
+    { id: "fav", label: g.favorites(myFavs.size), show: favReady && !!guestId },
+    { id: "mine", label: g.mine(mineCount), show: !!guestId },
   ];
 
   return (
     <>
       <div className="px-5 pt-2.5 pb-4">
-        <h1 className="large-title">現像できました。</h1>
+        <h1 className="large-title">{g.title}</h1>
         <div className="mt-1.5 flex items-center justify-between gap-3">
           <p className="text-[15px] text-label-2">
-            {photographers.length}人が撮った、{photos.length}コマ。
+            {g.summary(photographers.length, photos.length)}
           </p>
           <div className="flex shrink-0 gap-2">
             {refreshButton}
             <button type="button" onClick={selecting ? endSelecting : () => setSelecting(true)} className="btn-glass" aria-pressed={selecting}>
-              {selecting ? "キャンセル" : "選択"}
+              {selecting ? g.cancel : g.select}
             </button>
           </div>
         </div>
@@ -394,7 +404,7 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
               </button>
             ))}
           <label className="relative shrink-0">
-            <span className="sr-only">撮った人で絞り込む</span>
+            <span className="sr-only">{g.byWhoLabel}</span>
             <select
               value={who}
               onChange={(e) => setWho(e.target.value)}
@@ -402,10 +412,10 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
                 who ? "bg-label text-black" : "bg-surface text-label"
               }`}
             >
-              <option value="">撮った人</option>
+              <option value="">{g.byWho}</option>
               {photographers.map(([id, p]) => (
                 <option key={id} value={id}>
-                  {p.name}（{p.count}）
+                  {p.name} ({p.count})
                 </option>
               ))}
             </select>
@@ -420,10 +430,10 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
       {visible.length === 0 ? (
         <div className="px-5 py-16 text-center">
           <p className="text-[17px] font-semibold">
-            {filter === "fav" ? "お気に入りはまだありません。" : "該当する写真はありません。"}
+            {filter === "fav" ? g.noFavorites : g.noMatch}
           </p>
           {filter === "fav" && (
-            <p className="mt-2 text-sm text-label-2">写真を開いて♡を押すと、ここに集まります。</p>
+            <p className="mt-2 text-sm text-label-2">{g.noFavoritesHint}</p>
           )}
         </div>
       ) : (
@@ -446,7 +456,7 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
                   aria-pressed={selecting ? isPicked : undefined}
                   className="group relative block w-full overflow-hidden rounded-[2px] bg-black"
                   style={{ aspectRatio: "3 / 4" }}
-                  aria-label={`${frame}コマ目、${p.nickname}さんの写真${selecting ? (isPicked ? "（選択中）" : "を選ぶ") : "を開く"}`}
+                  aria-label={g.tileLabel(frame, p.nickname, selecting ? (isPicked ? "picked" : "pick") : "open")}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -485,15 +495,15 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
         <div className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-separator bg-bg/90 px-4 pt-3 backdrop-blur-md">
           <div className="mx-auto flex max-w-xl flex-col gap-3">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-label-2">{picked.size}枚を選択</span>
+              <span className="text-label-2">{g.picked(picked.size)}</span>
               <button type="button" onClick={pickAll} className="link text-sm">
-                {allPicked ? "選択をすべて解除" : "表示中をすべて選択"}
+                {allPicked ? g.clearAll : g.selectAll}
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <button type="button" onClick={() => void savePicked()} disabled={picked.size === 0 || !!busy} className="btn-primary h-11 text-[15px]">
                 <Download className="size-4" />
-                保存
+                {g.save}
               </button>
               <button
                 type="button"
@@ -502,13 +512,13 @@ export function PhotoGallery({ eventId, eventTitle, guestId }: Props) {
                 className="btn-glass h-11 text-[15px]"
               >
                 <Film className="size-4" />
-                ベタ焼きにする
+                {g.makeSheet}
               </button>
             </div>
             <p className="text-center text-[11px] text-label-3">
               {picked.size > CONTACT_SHEET_MAX
-                ? `ベタ焼きは${CONTACT_SHEET_MAX}コマまでです（いま${picked.size}枚）`
-                : `ベタ焼きは選んだ写真を1枚の画像にまとめます（${CONTACT_SHEET_MAX}コマまで）`}
+                ? g.sheetTooMany(CONTACT_SHEET_MAX, picked.size)
+                : g.sheetHint(CONTACT_SHEET_MAX)}
             </p>
           </div>
         </div>
@@ -571,6 +581,8 @@ type ModalProps = {
 };
 
 function PhotoModal({ photos, index, frameOf, eventTitle, favorite, onChange, onClose }: ModalProps) {
+  const { t, lang } = useI18n();
+  const g: Messages["gallery"] = t.gallery;
   const photo = photos[index];
   const frame = frameOf.get(photo.id) ?? 0;
   const [saving, setSaving] = useState(false);
@@ -606,7 +618,7 @@ function PhotoModal({ photos, index, frameOf, eventTitle, favorite, onChange, on
       const file = await fetchAsFile(photo.url, `${eventTitle}_${photo.nickname}_${stamp}`);
       await saveFiles([file], file.name);
     } catch (e) {
-      setSaveError(toFriendlyError(e));
+      setSaveError(toFriendlyError(e, lang));
     } finally {
       setSaving(false);
     }
@@ -617,7 +629,7 @@ function PhotoModal({ photos, index, frameOf, eventTitle, favorite, onChange, on
       className="fixed inset-0 z-50 flex flex-col bg-bg animate-fade-in"
       role="dialog"
       aria-modal="true"
-      aria-label="写真の拡大表示"
+      aria-label={g.viewer}
       onTouchStart={(e) => (touchStartX.current = e.touches[0].clientX)}
       onTouchEnd={(e) => {
         if (touchStartX.current === null) return;
@@ -630,12 +642,12 @@ function PhotoModal({ photos, index, frameOf, eventTitle, favorite, onChange, on
       <header className="safe-top grid grid-cols-[1fr_auto_1fr] items-center px-3 pb-2">
         <button type="button" onClick={onClose} className="link h-11 justify-self-start px-1">
           <ChevronLeft className="size-5" />
-          ベタ焼き
+          {g.back}
         </button>
         <div className="flex flex-col items-center">
           <p className="max-w-[50vw] truncate text-[15px] font-semibold">{photo.nickname}</p>
           <p className="text-[11px] text-label-2">
-            {frame}コマ目　{formatTime(photo.created_at)}
+            {g.frameAt(frame, formatTime(photo.created_at, lang))}
           </p>
         </div>
         <span />
@@ -652,7 +664,7 @@ function PhotoModal({ photos, index, frameOf, eventTitle, favorite, onChange, on
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={photo.url}
-            alt={`${photo.nickname}さんが撮影した写真`}
+            alt={g.alt(photo.nickname)}
             className="block max-h-[calc(100dvh-15rem)] w-auto max-w-[calc(100vw-3rem)] object-contain"
           />
           <figcaption className="absolute inset-x-3 bottom-2.5 flex items-baseline justify-between text-ink sm:bottom-3.5">
@@ -664,7 +676,7 @@ function PhotoModal({ photos, index, frameOf, eventTitle, favorite, onChange, on
 
       <footer className="safe-bottom flex flex-col items-center px-5 pt-3">
         <div className="flex w-full max-w-sm items-center justify-around">
-          <button type="button" onClick={prev} disabled={index === 0} aria-label="前の写真" className="grid size-11 place-items-center disabled:opacity-30">
+          <button type="button" onClick={prev} disabled={index === 0} aria-label={g.prev} className="grid size-11 place-items-center disabled:opacity-30">
             <ChevronLeft className="size-6" />
           </button>
           {favorite && (
@@ -672,7 +684,7 @@ function PhotoModal({ photos, index, frameOf, eventTitle, favorite, onChange, on
               type="button"
               onClick={() => favorite.toggle(photo)}
               aria-pressed={favorite.on}
-              aria-label={favorite.on ? "お気に入りから外す" : "お気に入りにする"}
+              aria-label={favorite.on ? g.favOff : g.favOn}
               className="flex h-11 min-w-11 items-center justify-center gap-1"
             >
               <Heart className={`size-6 transition ${favorite.on ? "scale-110 fill-accent text-accent" : ""}`} />
@@ -683,7 +695,7 @@ function PhotoModal({ photos, index, frameOf, eventTitle, favorite, onChange, on
             type="button"
             onClick={() => void save()}
             disabled={saving}
-            aria-label="写真を保存・共有"
+            aria-label={g.share}
             className="grid size-11 place-items-center text-accent disabled:opacity-50"
           >
             {saving ? <Loader2 className="size-6 animate-spin" /> : <Share className="size-6" />}
@@ -692,7 +704,7 @@ function PhotoModal({ photos, index, frameOf, eventTitle, favorite, onChange, on
             type="button"
             onClick={next}
             disabled={index === photos.length - 1}
-            aria-label="次の写真"
+            aria-label={g.next}
             className="grid size-11 place-items-center disabled:opacity-30"
           >
             <ChevronRight className="size-6" />

@@ -5,7 +5,9 @@ import { useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 import { CameraIllustration } from "@/components/CameraIllustration";
 import { Wordmark } from "@/components/Carton";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { StatusScreen } from "@/components/StatusScreen";
+import { useI18n } from "@/lib/i18n";
 import { useEventGuest } from "@/lib/hooks/useEventGuest";
 import { ensureAnonymousUser, getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { saveStoredGuest } from "@/lib/utils/guestStorage";
@@ -15,6 +17,8 @@ export default function JoinPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const router = useRouter();
   const { state } = useEventGuest(eventId);
+  const { t, lang } = useI18n();
+  const j = t.join;
 
   const [nickname, setNickname] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -25,11 +29,9 @@ export default function JoinPage() {
   if (state.status === "loading") return <StatusScreen kind="loading" />;
   if (state.status === "not-found")
     return (
-      <StatusScreen title="イベントが見つかりません">
-        QRコードやURLが正しいか、主催者にご確認ください。
-      </StatusScreen>
+      <StatusScreen title={t.common.eventNotFound}>{t.common.eventNotFoundBody}</StatusScreen>
     );
-  if (state.status === "error") return <StatusScreen title="読み込みに失敗しました">{state.message}</StatusScreen>;
+  if (state.status === "error") return <StatusScreen title={t.common.loadFailed}>{state.message}</StatusScreen>;
 
   const { event } = state;
   const existing = state.status === "ready" ? state.guest : null;
@@ -39,7 +41,7 @@ export default function JoinPage() {
     e.preventDefault();
     const name = value.trim();
     if (!name) {
-      setError("ニックネームを入力してください");
+      setError(j.nameRequired);
       return;
     }
     setSubmitting(true);
@@ -78,7 +80,7 @@ export default function JoinPage() {
       // 撮影時間が終わっていたら、カメラではなくギャラリーへ
       router.replace(`/event/${event.id}/${getShootingState(event) === "closed" ? "gallery" : "camera"}`);
     } catch (err) {
-      setError(toFriendlyError(err));
+      setError(toFriendlyError(err, lang));
       setSubmitting(false);
     }
   };
@@ -89,34 +91,37 @@ export default function JoinPage() {
 
   return (
     <main className="safe-top safe-bottom mx-auto flex min-h-dvh w-full max-w-md flex-1 flex-col items-center px-5">
-      <Wordmark className="mt-10" />
+      <div className="mt-3 flex w-full justify-end">
+        <LanguageToggle />
+      </div>
+      <Wordmark className="mt-3" />
       <CameraIllustration className="mt-10" shots={event.max_photos_per_guest} />
 
-      <h1 className="mt-12 text-center text-[32px] leading-tight font-bold tracking-[-0.02em]">撮って、待って、現像。</h1>
+      <h1 className="mt-12 text-center text-[32px] leading-tight font-bold tracking-[-0.02em]">{j.headline}</h1>
       <p className="mt-2.5 text-center text-[15px] leading-relaxed text-label-2 text-balance">
-        {event.title} の、今日だけのカメラ。
+        {j.lead(event.title)}
       </p>
 
       <div className="group-list mt-8 w-full">
         <div className="group-row">
-          <span>撮れる枚数</span>
-          <span className="text-label-2">{event.max_photos_per_guest}枚</span>
+          <span>{j.shots}</span>
+          <span className="text-label-2">{t.common.shotsUnit(event.max_photos_per_guest)}</span>
         </div>
         <div className="group-row">
-          <span className="shrink-0">撮影できる時間</span>
+          <span className="shrink-0">{j.window}</span>
           <span className={`text-right ${closed ? "text-danger" : "text-label-2"}`}>
-            {closed ? "終了しました" : formatShootWindow(event.shoot_start_at, event.shoot_end_at)}
+            {closed ? j.windowClosed : formatShootWindow(event.shoot_start_at, event.shoot_end_at, lang)}
           </span>
         </div>
         <div className="group-row">
-          <span>現像</span>
-          <span className="text-label-2">{revealPending ? formatDateTime(event.reveal_at!) : "撮ってすぐ"}</span>
+          <span>{j.reveal}</span>
+          <span className="text-label-2">{revealPending ? formatDateTime(event.reveal_at!, lang) : j.revealNow}</span>
         </div>
       </div>
       <p className="mt-2 w-full px-4 text-[13px] leading-relaxed text-label-2">
         {revealPending
-          ? "現像まで、誰も写真を見られません。撮った本人も。"
-          : "撮った写真は、すぐにみんなのギャラリーに並びます。"}
+          ? j.noteHidden
+          : j.noteInstant}
       </p>
 
       <div className="min-h-8 flex-1" />
@@ -125,7 +130,7 @@ export default function JoinPage() {
         <div className="group-list">
           <div className="group-row h-[50px]">
             <label htmlFor="nickname" className="shrink-0">
-              名前
+              {j.name}
             </label>
             <input
               id="nickname"
@@ -134,7 +139,7 @@ export default function JoinPage() {
               maxLength={30}
               autoComplete="nickname"
               enterKeyHint="go"
-              placeholder="山田太郎"
+              placeholder={j.namePlaceholder}
               className="min-w-0 flex-1 bg-transparent text-right text-base outline-none"
             />
           </div>
@@ -142,17 +147,15 @@ export default function JoinPage() {
         {error && <p className="px-4 text-sm text-danger">{error}</p>}
         {isDuplicate && (
           <div role="status" className="rounded-xl bg-accent/12 px-4 py-3 text-[13px] leading-relaxed text-accent">
-            「{value.trim()}」さんは、すでに参加しています。
-            <span className="text-label-2">
-              「山田太郎」のようにフルネームにするなど、区別できる名前にしませんか？そのままでよければ、もう一度ボタンを押してください。
-            </span>
+            {j.duplicate(value.trim())}
+            <span className="text-label-2">{j.duplicateHint}</span>
           </div>
         )}
         <button type="submit" disabled={submitting} className="btn-primary w-full">
           {submitting && <Loader2 className="size-5 animate-spin" />}
-          {isDuplicate ? "この名前で参加する" : closed ? "ギャラリーを見る" : existing ? "カメラに戻る" : "カメラを受け取る"}
+          {isDuplicate ? j.joinAnyway : closed ? j.toGallery : existing ? j.backToCamera : j.getCamera}
         </button>
-        <p className="text-center text-xs text-label-3">登録はいりません。このブラウザに保存されます。</p>
+        <p className="text-center text-xs text-label-3">{j.noSignup}</p>
       </form>
     </main>
   );

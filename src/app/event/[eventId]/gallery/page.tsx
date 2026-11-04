@@ -6,9 +6,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Camera } from "lucide-react";
 import { Wordmark } from "@/components/Carton";
 import { CountdownTimer } from "@/components/CountdownTimer";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { PhotoGallery } from "@/components/PhotoGallery";
 import { StatusScreen } from "@/components/StatusScreen";
 import { useEventGuest } from "@/lib/hooks/useEventGuest";
+import { usePendingUploads } from "@/lib/hooks/usePendingUploads";
+import { useI18n } from "@/lib/i18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { formatDateTime, isRevealed } from "@/lib/utils/format";
 import type { EventStats } from "@/types";
@@ -17,6 +20,9 @@ export default function GalleryPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const router = useRouter();
   const { state } = useEventGuest(eventId);
+  const { t } = useI18n();
+  // カメラ画面で送れなかった写真が残っていたら、ギャラリーを見ている間にも送る
+  usePendingUploads(state.status === "ready" ? state.guest.id : null);
 
   const event = state.status === "ready" || state.status === "no-guest" ? state.event : null;
   const canView = state.status === "ready" || (state.status === "no-guest" && state.isOwner);
@@ -43,8 +49,8 @@ export default function GalleryPage() {
   }, []);
 
   if (state.status === "not-found")
-    return <StatusScreen title="イベントが見つかりません">URLが正しいか確認してください。</StatusScreen>;
-  if (state.status === "error") return <StatusScreen title="読み込めませんでした">{state.message}</StatusScreen>;
+    return <StatusScreen title={t.common.eventNotFound}>{t.common.eventNotFoundBody}</StatusScreen>;
+  if (state.status === "error") return <StatusScreen title={t.common.loadFailed}>{state.message}</StatusScreen>;
   if (!event || !canView || revealed === null) return <StatusScreen kind="loading" />;
 
   const guestId = state.status === "ready" ? state.guest.id : null;
@@ -53,12 +59,15 @@ export default function GalleryPage() {
     <main className="safe-top flex min-h-dvh flex-1 flex-col bg-bg">
       <header className="mx-auto flex h-[52px] w-full max-w-5xl items-center justify-between px-5">
         <Wordmark />
-        {guestId && (
-          <Link href={`/event/${event.id}/camera`} className="link h-11">
-            <Camera className="size-[18px]" />
-            カメラ
-          </Link>
-        )}
+        <div className="flex items-center gap-3">
+          <LanguageToggle />
+          {guestId && (
+            <Link href={`/event/${event.id}/camera`} className="link h-11">
+              <Camera className="size-[18px]" />
+              {t.common.camera}
+            </Link>
+          )}
+        </div>
       </header>
 
       <div className="mx-auto w-full max-w-5xl flex-1">
@@ -86,6 +95,8 @@ function DevelopingView({
   revealAt: string;
   onComplete: () => void;
 }) {
+  const { t, lang } = useI18n();
+  const d = t.developing;
   const [stats, setStats] = useState<EventStats | null>(null);
   const [mine, setMine] = useState<number | null>(null);
 
@@ -120,12 +131,12 @@ function DevelopingView({
   return (
     <div className="safe-bottom mx-auto flex min-h-[calc(100dvh-60px)] max-w-md flex-col px-5">
       <h1 className="large-title mt-3.5">
-        ただいま、
+        {d.title1}
         <br />
-        現像中。
+        {d.title2}
       </h1>
       <p className="mt-2.5 text-[15px] leading-relaxed text-label-2">
-        {formatDateTime(revealAt)} に、みんなの写真が届きます。
+        {d.arrives(formatDateTime(revealAt, lang))}
       </p>
 
       <div className="mt-8">
@@ -140,14 +151,14 @@ function DevelopingView({
             className="absolute inset-x-0 top-0 h-7 bg-kraft-deep/70"
             style={{ clipPath: "polygon(0 0, 100% 0, 94% 100%, 6% 100%)" }}
           />
-          <p className="border-b-2 border-teal-ink pb-1.5 text-lg font-bold">現像・プリント</p>
+          <p className="border-b-2 border-teal-ink pb-1.5 text-lg font-bold">{d.envelope}</p>
           {[
-            ["お預かり", stats ? `${stats.photo_count} 枚` : "…"],
-            ["参加", stats ? `${stats.guest_count} 人` : "…"],
-            ["お渡し", short],
+            [d.photos, stats ? d.photoCount(stats.photo_count) : "…"],
+            [d.guests, stats ? d.guestCount(stats.guest_count) : "…"],
+            [d.pickup, short],
           ].map(([k, v]) => (
             <div key={k} className="flex gap-3 border-b border-teal-ink/35 py-2.5">
-              <span className="w-14 shrink-0">{k}</span>
+              <span className="w-16 shrink-0">{k}</span>
               <span className="font-bold text-ink">{v}</span>
             </div>
           ))}
@@ -155,7 +166,7 @@ function DevelopingView({
             aria-hidden
             className="absolute top-[58px] right-[18px] flex size-[70px] rotate-[14deg] flex-col items-center justify-center rounded-full border-[3px] border-tomato/80 text-tomato/90 mix-blend-multiply"
           >
-            <span className="text-[15px] leading-none font-bold">現像中</span>
+            <span className="text-[15px] leading-none font-bold">{d.stamp}</span>
             <span className="cond mt-1 text-[10px]">EVENT CAM</span>
           </span>
         </div>
@@ -164,8 +175,8 @@ function DevelopingView({
       {guestId && (
         <div className="group-list">
           <div className="group-row h-[50px]">
-            <span>あなたが撮った写真</span>
-            <span className="text-label-2">{mine ?? "…"} 枚</span>
+            <span>{d.yours}</span>
+            <span className="text-label-2">{mine === null ? "…" : t.common.shotsUnit(mine)}</span>
           </div>
         </div>
       )}

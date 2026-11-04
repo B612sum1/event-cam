@@ -25,15 +25,3 @@ export function CartonStripes({ className = "" }: { className?: string }) {
     </div>
   );
 }
-
-/** 使い捨てカメラの「27枚撮り」表記を、1人あたりの撮影枚数に */
-export function ShotsBadge({ count, className = "" }: { count: number; className?: string }) {
-  return (
-    <span className={`grid size-24 shrink-0 rotate-[-8deg] place-items-center rounded-full bg-tomato text-white ${className}`}>
-      <span className="flex flex-col items-center leading-none">
-        <span className="cond text-[44px] leading-[0.85]">{count}</span>
-        <span className="mt-1 text-[13px] font-bold">枚撮り</span>
-      </span>
-    </span>
-  );
-}

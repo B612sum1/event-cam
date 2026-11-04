@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useI18n } from "@/lib/i18n";
 
 type Props = {
   kind?: "loading" | "message";
@@ -11,10 +14,11 @@ type Props = {
 
 /** 読み込み中・エラー・見つからない等の全画面表示 */
 export function StatusScreen({ kind = "message", title, children, action }: Props) {
+  const { t } = useI18n();
   return (
     <main className="flex min-h-dvh flex-1 flex-col items-center justify-center gap-3 bg-bg px-8 text-center">
       {kind === "loading" ? (
-        <Loader2 className="size-7 animate-spin text-label-3" aria-label="読み込み中" />
+        <Loader2 className="size-7 animate-spin text-label-3" aria-label={t.common.loading} />
       ) : (
         <>
           {title && <h1 className="text-[22px] font-bold tracking-[-0.01em]">{title}</h1>}

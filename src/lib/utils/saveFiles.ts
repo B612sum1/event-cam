@@ -1,6 +1,7 @@
 "use client";
 
 import { zipSync } from "fflate";
+import { FETCH_FAILED } from "@/lib/utils/format";
 
 /** 共有シートで一度に渡せる枚数の目安（多すぎると iPhone で失敗することがある） */
 const SHARE_LIMIT = 20;
@@ -12,7 +13,7 @@ const isTouchDevice = () => window.matchMedia("(pointer: coarse)").matches;
 /** 署名付きURLから写真を取ってきて File にする */
 export async function fetchAsFile(url: string, baseName: string): Promise<File> {
   const res = await fetch(url);
-  if (!res.ok) throw new Error("写真を取得できませんでした");
+  if (!res.ok) throw new Error(FETCH_FAILED);
   const blob = await res.blob();
   const ext = blob.type === "image/jpeg" ? "jpg" : blob.type === "image/png" ? "png" : "webp";
   return new File([blob], safeFileName(`${baseName}.${ext}`), { type: blob.type });

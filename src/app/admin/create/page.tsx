@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { Wordmark } from "@/components/Carton";
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { useI18n, type Messages } from "@/lib/i18n";
 import { ensureAnonymousUser, getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toDateTimeLocalValue, toFriendlyError } from "@/lib/utils/format";
 
@@ -14,7 +16,7 @@ type RevealMode = "scheduled" | "immediate";
 type StartMode = "now" | "scheduled";
 type EndMode = "reveal" | "scheduled" | "none";
 
-function quickTimes(): { label: string; value: string }[] {
+function quickTimes(m: Messages["create"]): { label: string; value: string }[] {
   const now = new Date();
   const roundUp = (d: Date) => {
     const r = new Date(d);
@@ -27,14 +29,16 @@ function quickTimes(): { label: string; value: string }[] {
   tomorrow9.setDate(now.getDate() + 1);
   tomorrow9.setHours(9, 0, 0, 0);
   return [
-    { label: "3時間後", value: toDateTimeLocalValue(inHours(3)) },
-    { label: "5時間後", value: toDateTimeLocalValue(inHours(5)) },
-    { label: "明日の朝9時", value: toDateTimeLocalValue(tomorrow9) },
+    { label: m.in3h, value: toDateTimeLocalValue(inHours(3)) },
+    { label: m.in5h, value: toDateTimeLocalValue(inHours(5)) },
+    { label: m.tomorrow9, value: toDateTimeLocalValue(tomorrow9) },
   ];
 }
 
 export default function CreateEventPage() {
   const router = useRouter();
+  const { t, lang } = useI18n();
+  const m = t.create;
   const [title, setTitle] = useState("");
   const [maxPhotos, setMaxPhotos] = useState(15);
   const [mode, setMode] = useState<RevealMode>("scheduled");
@@ -53,40 +57,40 @@ export default function CreateEventPage() {
     setError(null);
 
     const trimmed = title.trim();
-    if (!trimmed) return setError("イベント名を入力してください");
+    if (!trimmed) return setError(m.errName);
     if (!Number.isInteger(maxPhotos) || maxPhotos < 1 || maxPhotos > 100)
-      return setError("撮影枚数は 1〜100 枚で指定してください");
+      return setError(m.errShots);
 
     let revealAt: string | null = null;
     if (mode === "scheduled") {
-      if (!revealLocal) return setError("現像日時を指定してください");
+      if (!revealLocal) return setError(m.errRevealMissing);
       const d = new Date(revealLocal); // datetime-local は端末のタイムゾーンとして解釈される
-      if (Number.isNaN(d.getTime())) return setError("現像日時が正しくありません");
-      if (d.getTime() <= Date.now()) return setError("現像日時は未来の時刻を指定してください");
+      if (Number.isNaN(d.getTime())) return setError(m.errRevealInvalid);
+      if (d.getTime() <= Date.now()) return setError(m.errRevealPast);
       revealAt = d.toISOString();
     }
 
-    const parseLocal = (value: string, label: string) => {
-      if (!value) throw new Error(`${label}を指定してください`);
+    const parseLocal = (value: string, missing: string, invalid: string) => {
+      if (!value) throw new Error(missing);
       const d = new Date(value);
-      if (Number.isNaN(d.getTime())) throw new Error(`${label}が正しくありません`);
+      if (Number.isNaN(d.getTime())) throw new Error(invalid);
       return d;
     };
     let shootStartAt: string | null = null;
     let shootEndAt: string | null = null;
     try {
-      if (startMode === "scheduled") shootStartAt = parseLocal(startLocal, "撮影の開始時刻").toISOString();
+      if (startMode === "scheduled") shootStartAt = parseLocal(startLocal, m.errStartMissing, m.errStartInvalid).toISOString();
       if (effectiveEnd === "reveal") shootEndAt = revealAt;
       if (effectiveEnd === "scheduled") {
-        const end = parseLocal(endLocal, "撮影の終了時刻");
-        if (end.getTime() <= Date.now()) return setError("撮影の終了時刻は未来の時刻を指定してください");
+        const end = parseLocal(endLocal, m.errEndMissing, m.errEndInvalid);
+        if (end.getTime() <= Date.now()) return setError(m.errEndPast);
         shootEndAt = end.toISOString();
       }
     } catch (err) {
       return setError(err instanceof Error ? err.message : String(err));
     }
     if (shootStartAt && shootEndAt && new Date(shootStartAt) >= new Date(shootEndAt))
-      return setError("撮影の終了は、開始より後の時刻にしてください");
+      return setError(m.errOrder);
 
     setSubmitting(true);
     try {
@@ -107,7 +111,7 @@ export default function CreateEventPage() {
       if (insertError) throw insertError;
       router.push(`/admin/events/${data.id}`);
     } catch (err) {
-      setError(toFriendlyError(err));
+      setError(toFriendlyError(err, lang));
       setSubmitting(false);
     }
   };
@@ -117,24 +121,27 @@ export default function CreateEventPage() {
       <header className="mx-auto flex h-[52px] w-full max-w-lg items-center justify-between px-4">
         <Link href="/" className="link h-11">
           <ChevronLeft className="size-5" />
-          トップ
+          {t.common.top}
         </Link>
-        <Wordmark />
+        <div className="flex items-center gap-3">
+          <LanguageToggle />
+          <Wordmark />
+        </div>
       </header>
 
       <div className="mx-auto w-full max-w-lg px-5 pt-3 pb-10">
-        <h1 className="large-title">イベントを作る</h1>
+        <h1 className="large-title">{m.title}</h1>
         <p className="mt-2 text-[15px] leading-relaxed text-label-2">
-          作ると、参加用のQRコードができます。テーブルに置いたり、招待状に印刷して使ってください。
+          {m.lead}
         </p>
 
         <form onSubmit={submit} className="mt-8 space-y-8">
-          <Section label="イベント名">
+          <Section label={m.name}>
             <div className="group-list">
               <div className="group-row h-[50px]">
                 <input
                   id="title"
-                  aria-label="イベント名"
+                  aria-label={m.name}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   maxLength={100}
@@ -146,7 +153,7 @@ export default function CreateEventPage() {
             </div>
           </Section>
 
-          <Section label="1人あたりの枚数" hint="本物の使い捨てカメラは27枚撮り。少ないほど、1枚1枚を大事に撮ってもらえます。">
+          <Section label={m.shots} hint={m.shotsHint}>
             <div className="flex flex-wrap gap-2">
               {PHOTO_PRESETS.map((n) => (
                 <button
@@ -158,13 +165,13 @@ export default function CreateEventPage() {
                     maxPhotos === n ? "bg-label text-black" : "bg-surface text-label"
                   }`}
                 >
-                  {n}枚撮り
+                  {t.common.shotsRoll(n)}
                 </button>
               ))}
             </div>
             <div className="group-list mt-3">
               <div className="group-row h-[50px]">
-                <label htmlFor="max">枚数を入力</label>
+                <label htmlFor="max">{m.shotsInput}</label>
                 <span className="flex items-center gap-1 text-label-2">
                   <input
                     id="max"
@@ -176,18 +183,18 @@ export default function CreateEventPage() {
                     onChange={(e) => setMaxPhotos(e.target.valueAsNumber)}
                     className="w-14 bg-transparent text-right text-base text-label outline-none"
                   />
-                  枚
+                  {m.shotsUnit}
                 </span>
               </div>
             </div>
           </Section>
 
-          <Section label="現像のタイミング">
-            <div className="grid grid-cols-2 gap-1 rounded-[10px] bg-surface p-1" role="radiogroup" aria-label="現像のタイミング">
+          <Section label={m.reveal}>
+            <div className="grid grid-cols-2 gap-1 rounded-[10px] bg-surface p-1" role="radiogroup" aria-label={m.reveal}>
               {(
                 [
-                  { v: "scheduled", t: "時間を決める" },
-                  { v: "immediate", t: "撮ってすぐ" },
+                  { v: "scheduled", t: m.revealScheduled },
+                  { v: "immediate", t: m.revealInstant },
                 ] as const
               ).map((o) => (
                 <button
@@ -205,14 +212,14 @@ export default function CreateEventPage() {
               ))}
             </div>
             <p className="mt-2 px-4 text-[13px] text-label-2">
-              {mode === "scheduled" ? "その時間まで、誰も写真を見られません。" : "撮った写真が、すぐギャラリーに並びます。"}
+              {mode === "scheduled" ? m.revealScheduledNote : m.revealInstantNote}
             </p>
 
             {mode === "scheduled" && (
               <div className="mt-3 space-y-3">
                 <div className="group-list">
                   <div className="group-row h-[50px]">
-                    <label htmlFor="reveal" className="shrink-0">現像する日時</label>
+                    <label htmlFor="reveal" className="shrink-0">{m.revealAt}</label>
                     <input
                       id="reveal"
                       type="datetime-local"
@@ -223,7 +230,7 @@ export default function CreateEventPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 px-1">
-                  {quickTimes().map((q) => (
+                  {quickTimes(m).map((q) => (
                     <button key={q.label} type="button" onClick={() => setRevealLocal(q.value)} className="btn-glass">
                       {q.label}
                     </button>
@@ -233,25 +240,25 @@ export default function CreateEventPage() {
             )}
           </Section>
 
-          <Section label="撮影できる時間" hint="時間外はシャッターが押せません。判定はサーバーの時刻で行うので、スマホの時計を変えても撮れません。">
+          <Section label={m.window} hint={m.windowHint}>
             <div className="space-y-3">
               <div className="group-list">
                 <div className="group-row h-[50px]">
-                  <span className="shrink-0">開始</span>
+                  <span className="shrink-0">{m.start}</span>
                   <Segmented
-                    label="撮影の開始"
+                    label={m.startLabel}
                     value={startMode}
                     onChange={setStartMode}
                     options={[
-                      { v: "now", t: "すぐ" },
-                      { v: "scheduled", t: "時間を指定" },
+                      { v: "now", t: m.startNow },
+                      { v: "scheduled", t: m.pickTime },
                     ]}
                   />
                 </div>
                 {startMode === "scheduled" && (
                   <div className="group-row h-[50px]">
                     <label htmlFor="shoot-start" className="shrink-0 text-label-2">
-                      開始時刻
+                      {m.startAt}
                     </label>
                     <input
                       id="shoot-start"
@@ -266,22 +273,22 @@ export default function CreateEventPage() {
 
               <div className="group-list">
                 <div className="group-row h-[50px]">
-                  <span className="shrink-0">終了</span>
+                  <span className="shrink-0">{m.end}</span>
                   <Segmented
-                    label="撮影の終了"
+                    label={m.endLabel}
                     value={effectiveEnd}
                     onChange={setEndMode}
                     options={[
-                      ...(mode === "scheduled" ? [{ v: "reveal" as const, t: "現像まで" }] : []),
-                      { v: "scheduled", t: "時間を指定" },
-                      { v: "none", t: "決めない" },
+                      ...(mode === "scheduled" ? [{ v: "reveal" as const, t: m.endAtReveal }] : []),
+                      { v: "scheduled", t: m.pickTime },
+                      { v: "none", t: m.endNone },
                     ]}
                   />
                 </div>
                 {effectiveEnd === "scheduled" && (
                   <div className="group-row h-[50px]">
                     <label htmlFor="shoot-end" className="shrink-0 text-label-2">
-                      終了時刻
+                      {m.endAt}
                     </label>
                     <input
                       id="shoot-end"
@@ -301,9 +308,9 @@ export default function CreateEventPage() {
           <div className="space-y-3">
             <button type="submit" disabled={submitting} className="btn-primary w-full">
               {submitting && <Loader2 className="size-5 animate-spin" />}
-              イベントを作る
+              {m.submit}
             </button>
-            <p className="text-center text-xs text-label-3">管理画面は、いま使っているこのブラウザでだけ開けます。</p>
+            <p className="text-center text-xs text-label-3">{m.ownerNote}</p>
           </div>
         </form>
       </div>

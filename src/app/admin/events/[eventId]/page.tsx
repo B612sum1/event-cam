@@ -15,8 +15,10 @@ import {
 import { CameraIllustration } from "@/components/CameraIllustration";
 import { Wordmark } from "@/components/Carton";
 import { CountdownTimer } from "@/components/CountdownTimer";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { QRCodeDisplay } from "@/components/QRCodeDisplay";
 import { StatusScreen } from "@/components/StatusScreen";
+import { useI18n } from "@/lib/i18n";
 import { getCurrentUserId, getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   formatDateTime,
@@ -40,6 +42,8 @@ type LoadState =
 
 export default function AdminEventPage() {
   const { eventId } = useParams<{ eventId: string }>();
+  const { t, lang } = useI18n();
+  const a = t.admin;
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [guests, setGuests] = useState<GuestSummary[]>([]);
   const [photoCount, setPhotoCount] = useState(0);
@@ -68,12 +72,13 @@ export default function AdminEventPage() {
         if (cancelled) return;
         setState(data ? { status: "ready", event: data } : { status: "forbidden" });
       } catch (e) {
-        if (!cancelled) setState({ status: "error", message: toFriendlyError(e) });
+        if (!cancelled) setState({ status: "error", message: toFriendlyError(e, lang) });
       }
     })();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 言語を切り替えても読み直さない
   }, [eventId]);
 
   // 現像状態の表示を定期的に更新
@@ -165,7 +170,7 @@ export default function AdminEventPage() {
       .select("*")
       .single();
     setConfirmClose(false);
-    if (error) setShootError(toFriendlyError(error));
+    if (error) setShootError(toFriendlyError(error, lang));
     else if (data) {
       setState({ status: "ready", event: data });
       setNow(Date.now());
@@ -184,14 +189,14 @@ export default function AdminEventPage() {
 
   // ---- 描画 ----------------------------------------------------------------
   if (state.status === "loading") return <StatusScreen kind="loading" />;
-  if (state.status === "not-found") return <StatusScreen title="イベントが見つかりません" action={{ href: "/admin/create", label: "イベントを作成" }} />;
+  if (state.status === "not-found") return <StatusScreen title={t.common.eventNotFound} action={{ href: "/admin/create", label: a.notFoundAction }} />;
   if (state.status === "forbidden")
     return (
-      <StatusScreen title="管理権限がありません" action={{ href: "/", label: "トップへ" }}>
-        管理画面は、このイベントを作成したブラウザからのみ開けます。
+      <StatusScreen title={a.forbidden} action={{ href: "/", label: a.toTop }}>
+        {a.forbiddenBody}
       </StatusScreen>
     );
-  if (state.status === "error") return <StatusScreen title="読み込みに失敗しました">{state.message}</StatusScreen>;
+  if (state.status === "error") return <StatusScreen title={t.common.loadFailed}>{state.message}</StatusScreen>;
 
   const { event } = state;
   const revealed = isRevealed(event.reveal_at, now);
@@ -207,23 +212,26 @@ export default function AdminEventPage() {
         <header className="mx-auto flex h-[52px] w-full max-w-5xl items-center justify-between px-4">
           <Link href="/" className="link h-11">
             <ChevronLeft className="size-5" />
-            トップ
+            {t.common.top}
           </Link>
-          <Wordmark />
+          <div className="flex items-center gap-3">
+            <LanguageToggle />
+            <Wordmark />
+          </div>
         </header>
 
         <div className="mx-auto w-full max-w-5xl px-5 pt-3 pb-10">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-[13px] text-label-2">管理画面</p>
+              <p className="text-[13px] text-label-2">{a.heading}</p>
               <h1 className="large-title mt-1">{event.title}</h1>
             </div>
             <div className="flex flex-wrap gap-2">
               <Link href={`/event/${event.id}/gallery`} className="btn-glass">
-                <Images className="size-4" /> ギャラリー
+                <Images className="size-4" /> {t.common.gallery}
               </Link>
               <Link href={`/event/${event.id}/join`} className="btn-glass">
-                <Camera className="size-4" /> 自分も撮る
+                <Camera className="size-4" /> {a.joinToo}
               </Link>
             </div>
           </div>
@@ -231,70 +239,70 @@ export default function AdminEventPage() {
           <div className="mt-8 grid gap-6 lg:grid-cols-[340px_1fr]">
             {/* QR */}
             <section className="flex flex-col items-center rounded-2xl bg-surface p-6 text-center">
-              <h2 className="text-[15px] font-semibold">参加用QRコード</h2>
+              <h2 className="text-[15px] font-semibold">{a.qr}</h2>
               <div className="mt-5">
-                <QRCodeDisplay value={joinUrl} size={220} className="shadow-none" />
+                <QRCodeDisplay value={joinUrl} size={220} className="shadow-none" title={a.qrTitle} />
               </div>
               <p className="mt-4 text-[11px] break-all text-label-3">{joinUrl}</p>
               <div className="mt-5 grid w-full gap-2">
                 <button type="button" onClick={() => window.print()} className="btn-primary w-full">
-                  <Printer className="size-4" /> 卓上カードを印刷
+                  <Printer className="size-4" /> {a.print}
                 </button>
                 <button type="button" onClick={copyLink} className="btn-glass h-11 w-full">
                   {copied ? <Check className="size-4 text-accent" /> : <Copy className="size-4" />}
-                  {copied ? "コピーしました" : "リンクをコピー"}
+                  {copied ? a.copied : a.copy}
                 </button>
               </div>
               <a href={joinUrl} target="_blank" rel="noreferrer" className="link mt-4 text-sm">
-                参加ページを開く <ExternalLink className="size-3.5" />
+                {a.openJoin} <ExternalLink className="size-3.5" />
               </a>
             </section>
 
             <div className="space-y-6">
               {/* 数字 */}
               <section className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl bg-separator">
-                <Counter label="参加者" value={guests.length} unit="人" />
-                <Counter label="撮影枚数" value={photoCount} unit="枚" />
-                <Counter label="1人あたり" value={event.max_photos_per_guest} unit="枚" />
+                <Counter label={a.guests} value={guests.length} unit={a.people} />
+                <Counter label={a.photos} value={photoCount} unit={a.shotsUnit} />
+                <Counter label={a.perGuest} value={event.max_photos_per_guest} unit={a.shotsUnit} />
               </section>
 
               {/* 撮影できる時間 */}
               <section>
                 <div className="mb-2 flex items-center justify-between px-4">
-                  <h2 className="text-[13px] text-label-2">撮影できる時間</h2>
+                  <h2 className="text-[13px] text-label-2">{a.window}</h2>
                   <span
                     className={`text-[13px] font-semibold ${
                       shooting === "open" ? "text-teal-light" : shooting === "before" ? "text-accent" : "text-label-3"
                     }`}
                   >
-                    {shooting === "open" ? "撮影中" : shooting === "before" ? "開始前" : "締め切り"}
+                    {shooting === "open" ? a.shooting : shooting === "before" ? a.before : a.closed}
                   </span>
                 </div>
                 <div className="rounded-2xl bg-surface p-5">
-                  <p className="text-[17px] font-semibold">{formatShootWindow(event.shoot_start_at, event.shoot_end_at)}</p>
+                  <p className="text-[17px] font-semibold">{formatShootWindow(event.shoot_start_at, event.shoot_end_at, lang)}</p>
                   <p className="mt-1 text-[13px] text-label-2">
                     {shooting === "closed"
-                      ? "シャッターは押せなくなっています。"
-                      : "時間外はシャッターが押せません。判定はサーバーの時刻で行います。"}
+                      ? a.closedNote
+                      : a.openNote}
                   </p>
                   <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                     {shooting === "closed" ? (
                       <button type="button" onClick={reopenShooting} className="btn-glass h-11 px-5">
-                        撮影を再開する
+                        {a.reopen}
                       </button>
                     ) : confirmClose ? (
                       <>
-                        <span className="w-full text-center text-sm text-label-2">全員の撮影を締め切ります。よろしいですか？</span>
+                        <span className="w-full text-center text-sm text-label-2">{a.closeConfirm}</span>
                         <button type="button" onClick={closeShootingNow} className="btn-primary h-11">
-                          今すぐ締め切る
+                          {a.closeNow}
                         </button>
                         <button type="button" onClick={() => setConfirmClose(false)} className="btn-glass h-11 px-5">
-                          やめる
+                          {t.common.cancel}
                         </button>
                       </>
                     ) : (
                       <button type="button" onClick={() => setConfirmClose(true)} className="btn-glass h-11 px-5">
-                        今すぐ締め切る
+                        {a.closeNow}
                       </button>
                     )}
                   </div>
@@ -305,39 +313,39 @@ export default function AdminEventPage() {
               {/* 現像 */}
               <section>
                 <div className="mb-2 flex items-center justify-between px-4">
-                  <h2 className="text-[13px] text-label-2">現像</h2>
+                  <h2 className="text-[13px] text-label-2">{a.reveal}</h2>
                   <span className={`text-[13px] font-semibold ${revealed ? "text-teal-light" : "text-accent"}`}>
-                    {revealed ? "公開中" : "現像中"}
+                    {revealed ? a.public : a.developing}
                   </span>
                 </div>
                 <div className="rounded-2xl bg-surface p-5">
                   {event.reveal_at && !revealed ? (
                     <>
-                      <p className="text-[15px] text-label-2">{formatDateTime(event.reveal_at)} に公開</p>
+                      <p className="text-[15px] text-label-2">{a.revealsAt(formatDateTime(event.reveal_at, lang))}</p>
                       <div className="mt-4">
                         <CountdownTimer target={event.reveal_at} onComplete={() => setNow(Date.now())} />
                       </div>
                       <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
                         {confirmReveal ? (
                           <>
-                            <span className="w-full text-center text-sm text-label-2">全員に公開します。よろしいですか？</span>
+                            <span className="w-full text-center text-sm text-label-2">{a.revealConfirm}</span>
                             <button type="button" onClick={revealNow} className="btn-primary h-11">
-                              今すぐ現像する
+                              {a.revealNow}
                             </button>
                             <button type="button" onClick={() => setConfirmReveal(false)} className="btn-glass h-11 px-5">
-                              やめる
+                              {t.common.cancel}
                             </button>
                           </>
                         ) : (
                           <button type="button" onClick={() => setConfirmReveal(true)} className="btn-glass h-11 px-5">
-                            今すぐ現像する
+                            {a.revealNow}
                           </button>
                         )}
                       </div>
                     </>
                   ) : (
                     <p className="text-[15px] leading-relaxed text-label-2">
-                      写真はギャラリーで公開中です。新しく撮られた写真も、すぐに追加されます。
+                      {a.publicNote}
                     </p>
                   )}
                 </div>
@@ -346,22 +354,22 @@ export default function AdminEventPage() {
               {/* 参加者一覧 */}
               <section>
                 <div className="mb-2 flex items-center justify-between px-4">
-                  <h2 className="text-[13px] text-label-2">参加者</h2>
+                  <h2 className="text-[13px] text-label-2">{a.guests}</h2>
                   <span className="inline-flex items-center gap-1.5 text-[13px] text-label-2">
                     <span className="size-1.5 animate-pulse rounded-full bg-teal-light" />
-                    自動で更新
+                    {a.live}
                   </span>
                 </div>
                 {guests.length === 0 ? (
                   <div className="rounded-2xl bg-surface px-5 py-8 text-center text-[15px] text-label-2">
-                    まだ誰も参加していません。QRコードを置いてみましょう。
+                    {a.noGuests}
                   </div>
                 ) : (
                   <ul className="group-list">
                     {[...guests].reverse().map((g) => (
                       <li key={g.id} className="group-row">
                         <span className="min-w-0 flex-1 truncate">{g.nickname}</span>
-                        <span className="text-[13px] text-label-3">{formatTime(g.created_at)}</span>
+                        <span className="text-[13px] text-label-3">{formatTime(g.created_at, lang)}</span>
                         <span className="w-16 text-right text-label-2 tabular-nums">
                           {g.photoCount} / {event.max_photos_per_guest}
                         </span>
@@ -378,24 +386,24 @@ export default function AdminEventPage() {
       {/* ============ 印刷用（卓上カード） ============ */}
       <section className="hidden min-h-[265mm] flex-col items-center px-10 pt-12 pb-10 text-center text-ink print:flex">
         <Wordmark size="md" tone="light" />
-        <h1 className="mt-6 text-5xl leading-tight font-bold tracking-[-0.025em]">撮って、待って、現像。</h1>
-        <p className="mt-3 text-xl text-muted">{event.title} の、今日だけのカメラ。</p>
+        <h1 className="mt-6 text-5xl leading-tight font-bold tracking-[-0.025em]">{t.join.headline}</h1>
+        <p className="mt-3 text-xl text-muted">{t.join.lead(event.title)}</p>
         <CameraIllustration className="mt-14 max-w-[330px]" shots={event.max_photos_per_guest} spotlight={false} />
         <div className="flex-1" />
         <div className="flex items-center gap-7 rounded-3xl bg-[#f5f5f7] p-6 text-left">
-          <QRCodeDisplay value={joinUrl} size={170} className="shadow-none" />
+          <QRCodeDisplay value={joinUrl} size={170} className="shadow-none" title={a.qrTitle} />
           <div className="flex flex-col gap-2.5">
             <p className="text-2xl leading-snug font-bold">
-              スマホのカメラで
+              {a.cardScan1}
               <br />
-              読み取ってください。
+              {a.cardScan2}
             </p>
             <p className="text-sm leading-relaxed text-muted">
-              ひとり{event.max_photos_per_guest}枚まで。
-              {event.shoot_end_at ? `撮影は ${formatShootWindow(event.shoot_start_at, event.shoot_end_at)}。` : ""}
-              {event.reveal_at ? `現像は ${formatDateTime(event.reveal_at)}。` : ""}
+              {a.cardLimit(event.max_photos_per_guest)}
+              {event.shoot_end_at ? a.cardWindow(formatShootWindow(event.shoot_start_at, event.shoot_end_at, lang)) : ""}
+              {event.reveal_at ? a.cardReveal(formatDateTime(event.reveal_at, lang)) : ""}
               <br />
-              アプリも登録もいりません。
+              {a.cardNoApp}
             </p>
           </div>
         </div>

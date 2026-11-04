@@ -1,5 +1,7 @@
 "use client";
 
+import { FETCH_FAILED, IMAGE_FAILED, formatDotDate } from "@/lib/utils/format";
+
 /**
  * 選んだ写真を、フィルムのコマが並んだ1枚の画像（ベタ焼き）にする。
  *
@@ -15,6 +17,9 @@ export type SheetItem = { url: string; frame: number; who: string };
 type Options = {
   title: string;
   date: Date;
+  /** 見出しの日付・コマ数の文と、下の一文（表示言語に合わせて渡す） */
+  meta: (date: string, frames: number) => string;
+  footer: string;
   onProgress?: (done: number, total: number) => void;
 };
 
@@ -27,7 +32,7 @@ const COND = '"DIN Condensed", "DIN Alternate", "Roboto Condensed", "Arial Narro
 
 async function loadBitmap(url: string): Promise<ImageBitmap> {
   const res = await fetch(url);
-  if (!res.ok) throw new Error("写真を取得できませんでした");
+  if (!res.ok) throw new Error(FETCH_FAILED);
   return createImageBitmap(await res.blob());
 }
 
@@ -38,7 +43,7 @@ function truncate(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   return `${t}…`;
 }
 
-export async function renderContactSheet(items: SheetItem[], { title, date, onProgress }: Options): Promise<Blob> {
+export async function renderContactSheet(items: SheetItem[], { title, date, meta, footer: footerText, onProgress }: Options): Promise<Blob> {
   const list = items.slice(0, CONTACT_SHEET_MAX);
   const n = list.length;
   const cols = n <= 4 ? 2 : n <= 12 ? 3 : 4;
@@ -64,7 +69,7 @@ export async function renderContactSheet(items: SheetItem[], { title, date, onPr
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("画像を作れませんでした");
+  if (!ctx) throw new Error(IMAGE_FAILED);
   ctx.imageSmoothingQuality = "high";
 
   // 台紙
@@ -87,7 +92,7 @@ export async function renderContactSheet(items: SheetItem[], { title, date, onPr
   ctx.fillText(truncate(ctx, title, W * 0.55), W - margin, baseY - Math.round(10 * u));
   ctx.fillStyle = "rgba(235, 235, 245, 0.6)";
   ctx.font = `400 ${Math.round(26 * u)}px ${SANS}`;
-  const d = `${date.getFullYear()}.${date.getMonth() + 1}.${date.getDate()}　${n}コマ`;
+  const d = meta(formatDotDate(date), n);
   ctx.fillText(d, W - margin, baseY + Math.round(32 * u));
   ctx.textAlign = "left";
 
@@ -154,10 +159,10 @@ export async function renderContactSheet(items: SheetItem[], { title, date, onPr
   ctx.fillStyle = "rgba(235, 235, 245, 0.35)";
   ctx.font = `400 ${Math.round(20 * u)}px ${SANS}`;
   ctx.textAlign = "right";
-  ctx.fillText("Event Cam でみんなが撮った写真", W - margin, H - Math.round(footer * 0.4));
+  ctx.fillText(footerText, W - margin, H - Math.round(footer * 0.4));
 
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
   canvas.width = canvas.height = 0; // メモリを早めに返す
-  if (!blob) throw new Error("画像を作れませんでした");
+  if (!blob) throw new Error(IMAGE_FAILED);
   return blob;
 }

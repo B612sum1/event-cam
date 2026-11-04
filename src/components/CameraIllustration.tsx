@@ -1,3 +1,6 @@
+"use client";
+
+import { useI18n } from "@/lib/i18n";
 import { CartonStripes, Wordmark } from "./Carton";
 
 type Props = {
@@ -10,6 +13,7 @@ type Props = {
 
 /** 使い捨てカメラの製品写真（CSS だけで描画） */
 export function CameraIllustration({ className = "", shots = 27, spotlight = true }: Props) {
+  const { t } = useI18n();
   return (
     <div className={`relative aspect-[290/170] w-full max-w-[290px] ${className}`} aria-hidden>
       {spotlight && (
@@ -27,7 +31,7 @@ export function CameraIllustration({ className = "", shots = 27, spotlight = tru
           {/* 外箱の紙 */}
           <div className="carton absolute inset-x-0 top-[36.5%] bottom-[8%] flex flex-col justify-between">
             <div className="flex flex-col items-end gap-0.5 self-end pt-[3.5%] pr-[5.5%]">
-              <span className="text-[11px] font-bold">{shots}枚撮り</span>
+              <span className="text-[11px] font-bold">{t.common.shotsRoll(shots)}</span>
               <Wordmark size="xs" tone="light" />
             </div>
             <CartonStripes />

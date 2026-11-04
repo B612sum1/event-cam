@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 
 type Props = {
   /** ISO 8601 の現像日時 */
@@ -27,6 +28,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
 
 /** 現像までのカウントダウン（サーバー描画時は「--」を出してハイドレーションずれを防ぐ） */
 export function CountdownTimer({ target, onComplete, tone = "large" }: Props) {
+  const tm = useI18n().t.time;
   const [remaining, setRemaining] = useState<number | null>(null);
   const completedRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
@@ -54,15 +56,15 @@ export function CountdownTimer({ target, onComplete, tone = "large" }: Props) {
   const parts = remaining === null ? null : diffParts(remaining);
   const units: { label: string; value: string }[] = parts
     ? [
-        ...(parts.days > 0 ? [{ label: "日", value: String(parts.days) }] : []),
-        { label: "時間", value: pad(parts.hours) },
-        { label: "分", value: pad(parts.minutes) },
-        { label: "秒", value: pad(parts.seconds) },
+        ...(parts.days > 0 ? [{ label: tm.days, value: String(parts.days) }] : []),
+        { label: tm.hours, value: pad(parts.hours) },
+        { label: tm.minutes, value: pad(parts.minutes) },
+        { label: tm.seconds, value: pad(parts.seconds) },
       ]
     : [
-        { label: "時間", value: "--" },
-        { label: "分", value: "--" },
-        { label: "秒", value: "--" },
+        { label: tm.hours, value: "--" },
+        { label: tm.minutes, value: "--" },
+        { label: tm.seconds, value: "--" },
       ];
 
   const isLcd = tone === "lcd";

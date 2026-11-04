@@ -23,7 +23,7 @@ export function SegmentDate({ date, height = 22, className = "", withTime = fals
       height={((2 + pad) * height) / 2}
       viewBox={`${-pad} ${-pad / 2} ${width + pad * 2} ${2 + pad}`}
       role="img"
-      aria-label={`日付 ${text}`}
+      aria-label={text}
       style={{ filter: "drop-shadow(0 0 3px rgb(230 140 10 / 0.8)) drop-shadow(0 0 1px rgb(240 170 30 / 0.85))", overflow: "visible" }}
     >
       <g fill="none" strokeLinecap="round" strokeLinejoin="round">
