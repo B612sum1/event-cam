@@ -16,6 +16,17 @@ import { newShotId } from "@/lib/utils/uploadQueue";
 
 type Toast = { id: number; kind: "success" | "info" | "error"; message: string };
 
+/** 送れなかった理由を、そのまま短く出す（原因を確かめるため） */
+function errorText(e: unknown): string {
+  const raw =
+    e instanceof Error
+      ? `${e.name === "Error" ? "" : `${e.name}: `}${e.message}`
+      : typeof e === "object" && e && "message" in e
+        ? String((e as { message: unknown }).message)
+        : String(e);
+  return raw.length > 120 ? `${raw.slice(0, 120)}…` : raw;
+}
+
 /** 撮影済みの枚数を端末にも覚えておく（電波が無くて数えられないときに使う） */
 const usedKey = (guestId: string) => `event-cam:used:${guestId}`;
 function readUsed(guestId: string): number {
@@ -56,7 +67,7 @@ export default function CameraPage() {
       });
       setToast({ id: Date.now(), kind: "success", message: late ? c.sentLater : c.saved });
     },
-    onWaiting: () => setToast({ id: Date.now(), kind: "info", message: c.queued }),
+    onFailed: (_e, manual) => setToast({ id: Date.now(), kind: "info", message: manual ? c.resendFailed : c.queued }),
     onRejected: (_shot, e) => {
       if (String((e as { message?: string })?.message ?? e).includes("photo_limit_reached") && event)
         setUsedCount(event.max_photos_per_guest);
@@ -130,10 +141,10 @@ export default function CameraPage() {
         eventId: event.id,
         guestId: guest.id,
         createdAt: Date.now(),
-        image: image.file,
+        image: await image.file.arrayBuffer(),
         imageExt: image.extension,
         imageMime: image.mimeType,
-        thumb: thumb?.file ?? null,
+        thumb: thumb ? await thumb.file.arrayBuffer() : null,
         thumbExt: thumb?.extension ?? null,
         thumbMime: thumb?.mimeType ?? null,
       });
@@ -206,10 +217,15 @@ export default function CameraPage() {
               )}
               <div className="min-w-0">
                 <p className="text-[13px] font-semibold">{c.pending(uploads.pending)}</p>
-                <p className="text-[11px] leading-snug text-label-2">{c.pendingHint}</p>
+                <p className="text-[11px] leading-snug text-label-2">{uploads.sending ? c.sendingNow : c.pendingHint}</p>
+                {!uploads.sending && uploads.lastError != null && (
+                  <p className="mt-1 text-[10px] leading-snug break-all text-label-3">
+                    {c.lastError(errorText(uploads.lastError))}
+                  </p>
+                )}
               </div>
             </div>
-            <button type="button" onClick={uploads.flush} className="btn-glass shrink-0">
+            <button type="button" onClick={uploads.resend} disabled={uploads.sending} className="btn-glass shrink-0 disabled:opacity-50">
               {c.sendNow}
             </button>
           </div>

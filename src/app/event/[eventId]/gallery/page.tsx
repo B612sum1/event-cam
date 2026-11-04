@@ -10,7 +10,6 @@ import { LanguageToggle } from "@/components/LanguageToggle";
 import { PhotoGallery } from "@/components/PhotoGallery";
 import { StatusScreen } from "@/components/StatusScreen";
 import { useEventGuest } from "@/lib/hooks/useEventGuest";
-import { usePendingUploads } from "@/lib/hooks/usePendingUploads";
 import { useI18n } from "@/lib/i18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { formatDateTime, isRevealed } from "@/lib/utils/format";
@@ -21,8 +20,6 @@ export default function GalleryPage() {
   const router = useRouter();
   const { state } = useEventGuest(eventId);
   const { t } = useI18n();
-  // カメラ画面で送れなかった写真が残っていたら、ギャラリーを見ている間にも送る
-  usePendingUploads(state.status === "ready" ? state.guest.id : null);
 
   const event = state.status === "ready" || state.status === "no-guest" ? state.event : null;
   const canView = state.status === "ready" || (state.status === "no-guest" && state.isOwner);

@@ -15,10 +15,14 @@ export type PendingShot = {
   eventId: string;
   guestId: string;
   createdAt: number;
-  image: Blob;
+  /**
+   * 写真のデータそのもの。iPhone の Safari では、保存した Blob をあとで読み出して送ると
+   * 失敗することがあるため、ArrayBuffer で持つ（前の版で保存した Blob も読めるようにしておく）
+   */
+  image: ArrayBuffer | Blob;
   imageExt: string;
   imageMime: string;
-  thumb: Blob | null;
+  thumb: ArrayBuffer | Blob | null;
   thumbExt: string | null;
   thumbMime: string | null;
 };
@@ -102,7 +106,7 @@ export type SendResult =
   /** 保存できた（または、もう保存済みだった） */
   | { kind: "sent" }
   /** 電波・タイムアウトなど。あとで送り直す */
-  | { kind: "retry" }
+  | { kind: "retry"; error: unknown }
   /** 枚数の上限・撮影時間の終了など、送り直しても通らない */
   | { kind: "rejected"; error: unknown };
 
@@ -119,6 +123,8 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))]);
 }
 
+const toBlob = (data: ArrayBuffer | Blob, type: string) => (data instanceof Blob ? data : new Blob([data], { type }));
+
 export async function sendShot(supabase: SupabaseClient<Database>, shot: PendingShot): Promise<SendResult> {
   const bucket = supabase.storage.from(PHOTO_BUCKET);
   // ファイル名は「ゲストID_撮影ID」で固定（保存先のルールで、ゲストIDから始まる名前しか置けない）
@@ -132,13 +138,13 @@ export async function sendShot(supabase: SupabaseClient<Database>, shot: Pending
       if (uploaded.length) await bucket.remove(uploaded).catch(() => {});
       return { kind: "rejected", error: e };
     }
-    return { kind: "retry" };
+    return { kind: "retry", error: e };
   };
 
   try {
     // 1. 元の写真
     const { error: upErr } = await withTimeout(
-      bucket.upload(path, shot.image, { contentType: shot.imageMime, cacheControl: "31536000", upsert: false }),
+      bucket.upload(path, toBlob(shot.image, shot.imageMime), { contentType: shot.imageMime, cacheControl: "31536000", upsert: false }),
       60_000,
     );
     if (upErr && !isDuplicate(upErr as { message?: string; statusCode?: string })) return fail(upErr);
@@ -149,14 +155,14 @@ export async function sendShot(supabase: SupabaseClient<Database>, shot: Pending
     if (shot.thumb && shot.thumbExt) {
       const candidate = `${base}_thumb.${shot.thumbExt}`;
       const { error: thErr } = await withTimeout(
-        bucket.upload(candidate, shot.thumb, { contentType: shot.thumbMime ?? undefined, cacheControl: "31536000", upsert: false }),
+        bucket.upload(candidate, toBlob(shot.thumb, shot.thumbMime ?? "image/jpeg"), { contentType: shot.thumbMime ?? undefined, cacheControl: "31536000", upsert: false }),
         20_000,
       );
       if (!thErr || isDuplicate(thErr as { message?: string; statusCode?: string })) {
         thumbPath = candidate;
         uploaded.push(candidate);
       } else if (!PERMANENT.test(thErr.message)) {
-        return { kind: "retry" };
+        return { kind: "retry", error: thErr };
       }
     }
 
