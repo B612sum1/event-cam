@@ -77,6 +77,7 @@ export async function addPending(shot: PendingShot) {
 
 export async function removePending(id: string) {
   memory.delete(id);
+  originals.delete(id);
   try {
     await run("readwrite", (s) => s.delete(id));
   } catch {
@@ -123,7 +124,31 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))]);
 }
 
-const toBlob = (data: ArrayBuffer | Blob, type: string) => (data instanceof Blob ? data : new Blob([data], { type }));
+/**
+ * 撮ったばかりの写真の元データ（このタブの中だけ）。
+ * その場で送るときは、スマホに保存したものを読み出さずにこちらを使う（撮影前と同じ確実な送り方）。
+ */
+const originals = new Map<string, { image: Blob; thumb: Blob | null }>();
+export function rememberOriginal(id: string, image: Blob, thumb: Blob | null) {
+  originals.set(id, { image, thumb });
+}
+
+/** 写真のデータが空・読めない（iPhone で、保存した Blob を読み出したときに起こることがある） */
+export const PHOTO_UNREADABLE = "photo_unreadable";
+
+/**
+ * 保存しておいたデータから、送れる Blob を作り直す。
+ * 前の版が Blob のまま保存した写真は、一度中身を読み出してから作り直す（読めなければ空として扱う）。
+ */
+async function materialize(data: ArrayBuffer | Blob, type: string): Promise<Blob> {
+  if (data instanceof Blob) {
+    const buf = await data.arrayBuffer().catch(() => new ArrayBuffer(0));
+    if (buf.byteLength === 0) throw new Error(PHOTO_UNREADABLE);
+    return new Blob([buf], { type: data.type || type });
+  }
+  if (!data || data.byteLength === 0) throw new Error(PHOTO_UNREADABLE);
+  return new Blob([data], { type });
+}
 
 export async function sendShot(supabase: SupabaseClient<Database>, shot: PendingShot): Promise<SendResult> {
   const bucket = supabase.storage.from(PHOTO_BUCKET);
@@ -131,6 +156,23 @@ export async function sendShot(supabase: SupabaseClient<Database>, shot: Pending
   const base = `${shot.eventId}/${shot.guestId}_${shot.id}`;
   const path = `${base}.${shot.imageExt}`;
   const uploaded: string[] = [];
+
+  // 送るデータ。撮ったばかりならその場の元データ、そうでなければスマホに保存したもの
+  let imageBlob: Blob;
+  let thumbBlob: Blob | null = null;
+  const original = originals.get(shot.id);
+  if (original && original.image.size > 0) {
+    imageBlob = original.image;
+    thumbBlob = original.thumb;
+  } else {
+    try {
+      imageBlob = await materialize(shot.image, shot.imageMime);
+    } catch (e) {
+      // 中身が空で、何度送っても通らない写真。箱から出して知らせる
+      return { kind: "rejected", error: e };
+    }
+    if (shot.thumb) thumbBlob = await materialize(shot.thumb, shot.thumbMime ?? "image/jpeg").catch(() => null);
+  }
 
   const fail = async (e: unknown): Promise<SendResult> => {
     if (PERMANENT.test(messageOf(e))) {
@@ -144,7 +186,7 @@ export async function sendShot(supabase: SupabaseClient<Database>, shot: Pending
   try {
     // 1. 元の写真
     const { error: upErr } = await withTimeout(
-      bucket.upload(path, toBlob(shot.image, shot.imageMime), { contentType: shot.imageMime, cacheControl: "31536000", upsert: false }),
+      bucket.upload(path, imageBlob, { contentType: shot.imageMime, cacheControl: "31536000", upsert: false }),
       60_000,
     );
     if (upErr && !isDuplicate(upErr as { message?: string; statusCode?: string })) return fail(upErr);
@@ -152,10 +194,10 @@ export async function sendShot(supabase: SupabaseClient<Database>, shot: Pending
 
     // 2. 一覧用の小さい写真（失敗しても元の写真で表示できるので、電波以外のエラーなら無しで続ける）
     let thumbPath: string | null = null;
-    if (shot.thumb && shot.thumbExt) {
+    if (thumbBlob && thumbBlob.size > 0 && shot.thumbExt) {
       const candidate = `${base}_thumb.${shot.thumbExt}`;
       const { error: thErr } = await withTimeout(
-        bucket.upload(candidate, toBlob(shot.thumb, shot.thumbMime ?? "image/jpeg"), { contentType: shot.thumbMime ?? undefined, cacheControl: "31536000", upsert: false }),
+        bucket.upload(candidate, thumbBlob, { contentType: shot.thumbMime ?? undefined, cacheControl: "31536000", upsert: false }),
         20_000,
       );
       if (!thErr || isDuplicate(thErr as { message?: string; statusCode?: string })) {

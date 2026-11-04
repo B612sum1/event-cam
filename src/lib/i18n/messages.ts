@@ -29,6 +29,7 @@ export const ja = {
     forbidden: "権限がありません。参加ページからもう一度参加してください。",
     fetchPhoto: "写真を取得できませんでした。",
     makeImage: "画像を作れませんでした。",
+    unreadable: "この写真はスマホから読み出せませんでした（前の版で保存された写真です）。",
   },
   time: {
     anytime: "いつでも",
@@ -295,6 +296,7 @@ export const en: Messages = {
     forbidden: "Not allowed. Please join again from the event page.",
     fetchPhoto: "Couldn't get the photo.",
     makeImage: "Couldn't create the image.",
+    unreadable: "This photo couldn't be read from the phone (saved by an older version).",
   },
   time: {
     anytime: "Anytime",

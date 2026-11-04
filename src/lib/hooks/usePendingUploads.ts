@@ -46,14 +46,16 @@ export function usePendingUploads(guestId: string | null, callbacks: Callbacks =
         again.current = false;
         const manual = manualRef.current;
         manualRef.current = false;
+        const failures: unknown[] = [];
         const supabase = getSupabaseBrowserClient();
         for (const shot of await listPending(guestId)) {
           const result = await sendShot(supabase, shot);
           if (result.kind === "retry") {
             failedOnce.current.add(shot.id);
             setLastError(result.error);
-            cbRef.current.onFailed?.(result.error, manual);
-            break; // 電波が無いうちは、後ろの写真も送れないので一旦やめる
+            failures.push(result.error);
+            // 1枚送れなくても、ほかの写真は送ってみる（1枚の不具合で全部が止まらないように）
+            continue;
           }
           await removePending(shot.id);
           setPending((n) => Math.max(0, n - 1));
@@ -61,6 +63,7 @@ export function usePendingUploads(guestId: string | null, callbacks: Callbacks =
           if (result.kind === "sent") cbRef.current.onSent?.(shot, late);
           else cbRef.current.onRejected?.(shot, result.error);
         }
+        if (failures.length) cbRef.current.onFailed?.(failures[failures.length - 1], manual);
       } while (again.current);
       const left = (await listPending(guestId)).length;
       setPending(left);

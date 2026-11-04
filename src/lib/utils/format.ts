@@ -90,5 +90,6 @@ export function toFriendlyError(error: unknown, lang: Lang = "ja"): string {
   if (message.includes("row-level security") || message.includes("Unauthorized")) return e.forbidden;
   if (message === FETCH_FAILED) return e.fetchPhoto;
   if (message === IMAGE_FAILED) return e.makeImage;
+  if (message === "photo_unreadable") return e.unreadable;
   return message;
 }

@@ -12,7 +12,7 @@ import { useI18n } from "@/lib/i18n";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { formatDateTime, formatTime, getShootingState, isRevealed, toFriendlyError } from "@/lib/utils/format";
 import type { CompressedImage } from "@/lib/utils/imageCompression";
-import { newShotId } from "@/lib/utils/uploadQueue";
+import { newShotId, rememberOriginal } from "@/lib/utils/uploadQueue";
 
 type Toast = { id: number; kind: "success" | "info" | "error"; message: string };
 
@@ -136,8 +136,11 @@ export default function CameraPage() {
         return false;
       }
       // 箱に入れた時点で「撮れた」扱い（送信は後ろで続く）
+      const id = newShotId();
+      // その場で送るときは、この元データをそのまま使う
+      rememberOriginal(id, image.file, thumb?.file ?? null);
       await enqueue({
-        id: newShotId(),
+        id,
         eventId: event.id,
         guestId: guest.id,
         createdAt: Date.now(),
